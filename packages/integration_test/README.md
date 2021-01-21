@@ -8,7 +8,7 @@ This package is not an _endorsed_ implementation of `integration_test`. Therefor
 
 ```yaml
 dependencies:
-  integration_test: ^0.9.2
+  integration_test: ^1.0.1
   integration_test_tizen: ^1.0.0
 ```
 
