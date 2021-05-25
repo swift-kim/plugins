@@ -17,6 +17,7 @@
 #include <string>
 
 #include "log.h"
+#include "staticlibrary1.h"
 #include "webview.h"
 #include "webview_factory.h"
 
@@ -34,6 +35,9 @@ class WebviewFlutterTizenPlugin : public flutter::Plugin {
 
 void WebviewFlutterTizenPluginRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar) {
+  bool result = tizenstaticlibrary1();
+  LOG_INFO("%d", result ? 1 : 0);
+
   flutter::PluginRegistrar* core_registrar =
       flutter::PluginRegistrarManager::GetInstance()
           ->GetRegistrar<flutter::PluginRegistrar>(registrar);

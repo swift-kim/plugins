@@ -6,7 +6,7 @@ type = sharedLib
 profile = common-5.5
 
 # Source files
-USER_SRCS += src/webview_flutter_tizen_plugin.cc  src/webview.cc src/webview_factory.cc
+USER_SRCS += src/*.cc
 
 # User defines
 USER_DEFS =
@@ -21,7 +21,7 @@ USER_LFLAGS = -llightweight-web-engine.flutter -Wl,-rpath='$$ORIGIN' -Llib/${BUI
 
 # Libraries and objects
 USER_LIB_DIRS = lib/${BUILD_ARCH}
-USER_LIBS = lightweight-web-engine.flutter
+USER_LIBS = lightweight-web-engine.flutter staticlibrary1
 USER_OBJS =
 
 # User includes
