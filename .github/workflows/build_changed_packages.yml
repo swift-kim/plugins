@@ -40,8 +40,9 @@ jobs:
               echo "ENABLE=true" >> "$GITHUB_ENV"
               echo "CHANGED_PACKAGES=${CHANGED_PACKAGES[@]}" >> "$GITHUB_ENV"
           fi
+          echo "changed packages: $CHANGED_PACKAGES"
       - name: Install prerequisite packages
-        if: contains(env.ENABLE, true)
+        if: env.CHANGED_PACKAGES != ''
         run: |
           sudo apt-get install \
           acl \
@@ -65,7 +66,7 @@ jobs:
           libxcb-xfixes0 \
           libxi6
       - name: Install Tizen Studio
-        if: contains(env.ENABLE, true)
+        if: env.CHANGED_PACKAGES != ''
         run: |
           sudo apt install -y pciutils zip libncurses5 python libpython2.7
           curl http://download.tizen.org/sdk/Installer/tizen-studio_4.1/web-cli_Tizen_Studio_4.1_ubuntu-64.bin -o install.bin
@@ -73,7 +74,7 @@ jobs:
           ./install.bin --accept-license $HOME/tizen-studio
           rm install.bin
       - name: Install Tizen Studio packages
-        if: contains(env.ENABLE, true)
+        if: env.ENABLE == 'true'
         run: |
           $HOME/tizen-studio/package-manager/package-manager-cli.bin install \
           NativeCLI \
