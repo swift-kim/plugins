@@ -1,0 +1,71 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      # - name: Install prerequisite packages
+      #   run: |
+      #     sudo apt install -y pciutils zip libncurses5 python libpython2.7
+      #     sudo apt install -y \
+      #     acl \
+      #     bridge-utils \
+      #     gettext \
+      #     openvpn \
+      #     libfontconfig1 \
+      #     libglib2.0-0 \
+      #     libjpeg-turbo8 \
+      #     libpixman-1-0 \
+      #     libpng16-16 \
+      #     libsdl1.2debian \
+      #     libsm6 \
+      #     libv4l-0 \
+      #     libx11-xcb1 \
+      #     libxcb-icccm4 \
+      #     libxcb-image0 \
+      #     libxcb-randr0 \
+      #     libxcb-render-util0 \
+      #     libxcb-shape0 \
+      #     libxcb-xfixes0 \
+      #     libxi6
+      # - name: Install Tizen Studio
+      #   run: |
+      #     curl http://download.tizen.org/sdk/Installer/tizen-studio_4.1/web-cli_Tizen_Studio_4.1_ubuntu-64.bin -o install.bin
+      #     chmod a+x install.bin
+      #     ./install.bin --accept-license $HOME/tizen-studio
+      #     rm install.bin
+      # - name: Install Tizen Studio packages
+      #   run: |
+      #     $HOME/tizen-studio/package-manager/package-manager-cli.bin install \
+      #     NativeCLI \
+      #     NativeToolchain-Gcc-9.2 \
+      #     WEARABLE-4.0-NativeAppDevelopment \
+      #     WEARABLE-5.5-NativeAppDevelopment
+      # - name: Install flutter-tizen
+      #   run: |
+      #     git clone https://github.com/flutter-tizen/flutter-tizen.git
+      - name: Build PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "base: ${{ github.base_ref }}"
+          echo ${{ github.head_ref }}
+          git log master
+          git log ${{ github.base_ref }}
+      - name: Build commit
+        if: github.event_name == 'push'
+        run: |
+          echo hello
+        # run: |
+        #   export PATH=$PATH:`pwd`/flutter-tizen/bin
+        #   EXAMPLES=`find "$(pwd)" -name example` && echo $EXAMPLES
+        #   for example in $EXAMPLES; do
+        #     echo $example
+        #     cd $example
+        #     flutter-tizen pub get
+        #     flutter-tizen build tpk --device-profile wearable -v
+        #   done
