@@ -250,8 +250,8 @@ class CameraDevice {
   void LockCaptureOrientation(OrientationType orientation);
   void UnlockCaptureOrientation();
 
-  void PausePreview() { is_preview_paused_ = true; }
-  void ResumePreview() { is_preview_paused_ = false; }
+  void PausePreview();
+  void ResumePreview();
 
  private:
   bool CreateCamera();

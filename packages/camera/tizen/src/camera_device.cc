@@ -993,11 +993,6 @@ void CameraDevice::Open(
           self->prepared_packet_ = packet;
           return;
         }
-        if (self->is_preview_paused_) {
-          media_packet_destroy(packet);
-          self->prepared_packet_ = nullptr;
-          return;
-        }
         self->prepared_packet_ = packet;
         self->registrar_->texture_registrar()->MarkTextureFrameAvailable(
             self->texture_id_);
@@ -1297,7 +1292,9 @@ void CameraDevice::StopVideoRecording(
   }
 
   UnprepareRecorder();
-  StartCameraPreview();
+  if (!is_preview_paused_) {
+    StartCameraPreview();
+  }
 
   if (success) {
     result->Success(flutter::EncodableValue(file_name));
@@ -1315,12 +1312,19 @@ void CameraDevice::TakePicture(
       is_orientation_locked_ ? locked_orientation_
                              : orientation_manager_->GetDeviceOrientationType(),
       type_ == CameraDeviceType::kFront));
+
+  // The camera state must be set to CAMERA_STATE_PREVIEW before capturing.
+  if (is_preview_paused_) {
+    StartCameraPreview();
+  }
   auto p_result = result.release();
   if (!StartCameraCapture(
           [p_result, this](const std::string &captured_file_path) {
             flutter::EncodableValue value(captured_file_path);
             p_result->Success(value);
-            StartCameraPreview();
+            if (this->is_preview_paused_) {
+              StopCameraPreview();
+            }
             UpdateStates();
             delete p_result;
           },
@@ -1345,6 +1349,17 @@ void CameraDevice::LockCaptureOrientation(OrientationType orientation) {
 
 void CameraDevice::UnlockCaptureOrientation() {
   is_orientation_locked_ = false;
+}
+
+void CameraDevice::PausePreview() {
+  is_preview_paused_ = true;
+  StopCameraPreview();
+  UpdateStates();
+}
+void CameraDevice::ResumePreview() {
+  is_preview_paused_ = false;
+  StartCameraPreview();
+  UpdateStates();
 }
 
 bool CameraDevice::SetCameraMediaPacketPreviewCb(
