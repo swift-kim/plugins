@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef FLUTTER_PLUGIN_WEBVIEW_FLUTTER_TIZEN_WEVIEW_H_
-#define FLUTTER_PLUGIN_WEBVIEW_FLUTTER_TIZEN_WEVIEW_H_
+#ifndef FLUTTER_PLUGIN_WEVIEW_H_
+#define FLUTTER_PLUGIN_WEVIEW_H_
 
 #include <Ecore_IMF.h>
 #include <flutter/encodable_value.h>
@@ -33,6 +33,7 @@ class WebView : public PlatformView {
           flutter::TextureRegistrar* textureRegistrar, double width,
           double height, flutter::EncodableMap& params);
   ~WebView();
+
   virtual void Dispose() override;
   virtual void Resize(double width, double height) override;
   virtual void Touch(int type, int button, double x, double y, double dx,
@@ -86,4 +87,4 @@ class WebView : public PlatformView {
   bool use_sw_backend_;
 };
 
-#endif  // FLUTTER_PLUGIN_WEBVIEW_FLUTTER_TIZEN_WEVIEW_H_
+#endif  // FLUTTER_PLUGIN_WEVIEW_H_

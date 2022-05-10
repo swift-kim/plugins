@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef FLUTTER_PLUGIN_WEBVIEW_FLUTTER_TIZEN_WEBVIEW_BUFFER_POOL_H_
-#define FLUTTER_PLUGIN_WEBVIEW_FLUTTER_TIZEN_WEBVIEW_BUFFER_POOL_H_
+#ifndef FLUTTER_PLUGIN_WEBVIEW_BUFFER_POOL_H_
+#define FLUTTER_PLUGIN_WEBVIEW_BUFFER_POOL_H_
 
 #include <flutter_texture_registrar.h>
 #include <tbm_surface.h>
@@ -62,4 +62,4 @@ class SingleBufferPool : public BufferPool {
   virtual void Release(BufferUnit* unit);
 };
 
-#endif
+#endif  // FLUTTER_PLUGIN_WEBVIEW_BUFFER_POOL_H_
