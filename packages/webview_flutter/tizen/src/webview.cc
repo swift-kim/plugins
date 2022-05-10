@@ -47,18 +47,14 @@ class NavigationRequestResult
   void ErrorInternal(const std::string& error_code,
                      const std::string& error_message,
                      const flutter::EncodableValue* error_details) override {
-    throw std::invalid_argument("navigationRequest calls must succeed [code:" +
-                                error_code + "][msg:" + error_message + "]");
+    LOG_ERROR("The request unexpectedly completed with an error.");
   }
 
-  void NotImplementedInternal() override {
-    throw std::invalid_argument(
-        "navigationRequest must be implemented by the webview method channel");
-  }
+  void NotImplementedInternal() override {}
 
  private:
   void LoadUrl() {
-    if (webview_ && webview_->GetWebViewInstance()) {
+    if (webview_->GetWebViewInstance()) {
       webview_->GetWebViewInstance()->LoadURL(url_);
     }
   }
@@ -67,7 +63,7 @@ class NavigationRequestResult
   WebView* webview_;
 };
 
-enum RequestErrorType {
+enum ResourceErrorType {
   NoError,
   UnknownError,
   HostLookupError,
@@ -88,41 +84,40 @@ enum RequestErrorType {
 
 static std::string ErrorCodeToString(int error_code) {
   switch (error_code) {
-    case RequestErrorType::AuthenticationError:
+    case ResourceErrorType::AuthenticationError:
       return "authentication";
-    case RequestErrorType::BadURLError:
+    case ResourceErrorType::BadURLError:
       return "badUrl";
-    case RequestErrorType::ConnectError:
+    case ResourceErrorType::ConnectError:
       return "connect";
-    case RequestErrorType::FailedSSLHandshakeError:
+    case ResourceErrorType::FailedSSLHandshakeError:
       return "failedSslHandshake";
-    case RequestErrorType::FileError:
+    case ResourceErrorType::FileError:
       return "file";
-    case RequestErrorType::FileNotFoundError:
+    case ResourceErrorType::FileNotFoundError:
       return "fileNotFound";
-    case RequestErrorType::HostLookupError:
+    case ResourceErrorType::HostLookupError:
       return "hostLookup";
-    case RequestErrorType::IOError:
+    case ResourceErrorType::IOError:
       return "io";
-    case RequestErrorType::ProxyAuthenticationError:
+    case ResourceErrorType::ProxyAuthenticationError:
       return "proxyAuthentication";
-    case RequestErrorType::RedirectLoopError:
+    case ResourceErrorType::RedirectLoopError:
       return "redirectLoop";
-    case RequestErrorType::TimeoutError:
+    case ResourceErrorType::TimeoutError:
       return "timeout";
-    case RequestErrorType::TooManyRequestError:
+    case ResourceErrorType::TooManyRequestError:
       return "tooManyRequests";
-    case RequestErrorType::UnknownError:
+    case ResourceErrorType::UnknownError:
       return "unknown";
-    case RequestErrorType::UnsupportedAuthSchemeError:
+    case ResourceErrorType::UnsupportedAuthSchemeError:
       return "unsupportedAuthScheme";
-    case RequestErrorType::UnsupportedSchemeError:
+    case ResourceErrorType::UnsupportedSchemeError:
       return "unsupportedScheme";
+    default:
+      LOG_ERROR("Unknown error type: %d", error_code);
+      return std::to_string(error_code);
   }
-
-  std::string message =
-      "Could not find a string for errorCode: " + std::to_string(error_code);
-  throw std::invalid_argument(message);
 }
 
 template <typename T>
@@ -140,7 +135,7 @@ static bool GetValueFromEncodableMap(const flutter::EncodableValue& arguments,
   return false;
 }
 
-static bool IsEmulator() {
+static bool IsRunningOnEmulator() {
   bool result = false;
   char* value = nullptr;
   int ret = system_info_get_platform_string(
@@ -154,22 +149,14 @@ static bool IsEmulator() {
   return result;
 }
 
-WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
+WebView::WebView(flutter::PluginRegistrar* registrar, int view_id,
                  flutter::TextureRegistrar* texture_registrar, double width,
                  double height, const flutter::EncodableValue& params)
-    : PlatformView(registrar, viewId, nullptr),
+    : PlatformView(registrar, view_id, nullptr),
       texture_registrar_(texture_registrar),
-      webview_instance_(nullptr),
       width_(width),
-      height_(height),
-      working_surface_(nullptr),
-      candidate_surface_(nullptr),
-      rendered_surface_(nullptr),
-      is_mouse_lbutton_down_(false),
-      has_navigation_delegate_(false),
-      has_progress_tracking_(false),
-      context_(nullptr) {
-  use_sw_backend_ = IsEmulator();
+      height_(height) {
+  use_sw_backend_ = IsRunningOnEmulator();
   if (use_sw_backend_) {
     tbm_pool_ = std::make_unique<SingleBufferPool>(width, height);
   } else {
@@ -231,7 +218,7 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
     }
   }
 
-  // TODO(bwikbs): Implement autoMediaPlaybackPolicy.
+  // TODO: Implement autoMediaPlaybackPolicy.
 
   std::string user_agent;
   if (GetValueFromEncodableMap(params, "userAgent", &user_agent)) {
@@ -304,35 +291,37 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
 }
 
 void WebView::ApplySettings(const flutter::EncodableMap& settings) {
-  for (auto const& [key, val] : settings) {
-    if (std::holds_alternative<std::string>(key)) {
-      std::string k = std::get<std::string>(key);
-      if ("jsMode" == k) {
-        // NOTE: Not supported by Lightweight Web Engine (LWE) on Tizen.
-      } else if ("hasNavigationDelegate" == k) {
-        if (std::holds_alternative<bool>(val)) {
-          has_navigation_delegate_ = std::get<bool>(val);
-        }
-      } else if ("hasProgressTracking" == k) {
-        if (std::holds_alternative<bool>(val)) {
-          has_progress_tracking_ = std::get<bool>(val);
-        }
-      } else if ("debuggingEnabled" == k) {
+  for (const auto& item : settings) {
+    if (std::holds_alternative<std::string>(item.first)) {
+      std::string key = std::get<std::string>(item.first);
+      flutter::EncodableValue value = item.second;
+
+      if (key == "jsMode") {
         // NOTE: Not supported by LWE on Tizen.
-      } else if ("gestureNavigationEnabled" == k) {
+      } else if (key == "hasNavigationDelegate") {
+        if (std::holds_alternative<bool>(value)) {
+          has_navigation_delegate_ = std::get<bool>(value);
+        }
+      } else if (key == "hasProgressTracking") {
+        if (std::holds_alternative<bool>(value)) {
+          has_progress_tracking_ = std::get<bool>(value);
+        }
+      } else if (key == "debuggingEnabled") {
         // NOTE: Not supported by LWE on Tizen.
-      } else if ("allowsInlineMediaPlayback" == k) {
+      } else if (key == "gestureNavigationEnabled") {
+        // NOTE: Not supported by LWE on Tizen.
+      } else if (key == "allowsInlineMediaPlayback") {
         // no-op inline media playback is always allowed on Tizen.
-      } else if ("userAgent" == k) {
-        if (std::holds_alternative<std::string>(val)) {
-          auto settings = webview_instance_->GetSettings();
-          settings.SetUserAgentString(std::get<std::string>(val));
+      } else if (key == "userAgent") {
+        if (std::holds_alternative<std::string>(value)) {
+          LWE::Settings settings = webview_instance_->GetSettings();
+          settings.SetUserAgentString(std::get<std::string>(value));
           webview_instance_->SetSettings(settings);
         }
-      } else if ("zoomEnabled" == k) {
+      } else if (key == "zoomEnabled") {
         // NOTE: Not supported by LWE on Tizen.
       } else {
-        throw std::invalid_argument("Unknown WebView setting: " + k);
+        LOG_ERROR("Unknown settings key: %s", key.c_str());
       }
     }
   }
@@ -377,13 +366,13 @@ void WebView::Dispose() {
 }
 
 void WebView::Resize(double width, double height) {
-  LOG_DEBUG("WebView::Resize width: %f height: %f \n", width, height);
   width_ = width;
   height_ = height;
 
   if (candidate_surface_) {
     candidate_surface_ = nullptr;
   }
+
   tbm_pool_->Prepare(width_, height_);
   webview_instance_->ResizeTo(width_, height_);
 }
@@ -408,90 +397,92 @@ void WebView::Touch(int type, int button, double x, double y, double dx,
         x, y);
     is_mouse_lbutton_down_ = false;
   } else {
-    // TODO: Not implemented
+    LOG_WARN("Unknown touch event type: %d", type);
   }
 }
 
-static LWE::KeyValue EcoreEventKeyToKeyValue(const char* ecore_key_string,
-                                             bool is_shift_pressed) {
-  if (strcmp("Left", ecore_key_string) == 0) {
+static LWE::KeyValue KeyNameToKeyValue(const std::string& ecore_key,
+                                       bool is_shift_pressed) {
+  if (ecore_key == "Left") {
     return LWE::KeyValue::ArrowLeftKey;
-  } else if (strcmp("Right", ecore_key_string) == 0) {
+  } else if (ecore_key == "Right") {
     return LWE::KeyValue::ArrowRightKey;
-  } else if (strcmp("Up", ecore_key_string) == 0) {
+  } else if (ecore_key == "Up") {
     return LWE::KeyValue::ArrowUpKey;
-  } else if (strcmp("Down", ecore_key_string) == 0) {
+  } else if (ecore_key == "Down") {
     return LWE::KeyValue::ArrowDownKey;
-  } else if (strcmp("space", ecore_key_string) == 0) {
+  } else if (ecore_key == "space") {
     return LWE::KeyValue::SpaceKey;
-  } else if (strcmp("Return", ecore_key_string) == 0) {
+  } else if (ecore_key == "Select") {
     return LWE::KeyValue::EnterKey;
-  } else if (strcmp("Tab", ecore_key_string) == 0) {
+  } else if (ecore_key == "Return") {
+    return LWE::KeyValue::EnterKey;
+  } else if (ecore_key == "Tab") {
     return LWE::KeyValue::TabKey;
-  } else if (strcmp("BackSpace", ecore_key_string) == 0) {
+  } else if (ecore_key == "BackSpace") {
     return LWE::KeyValue::BackspaceKey;
-  } else if (strcmp("Escape", ecore_key_string) == 0) {
+  } else if (ecore_key == "Escape") {
     return LWE::KeyValue::EscapeKey;
-  } else if (strcmp("Delete", ecore_key_string) == 0) {
+  } else if (ecore_key == "Delete") {
     return LWE::KeyValue::DeleteKey;
-  } else if (strcmp("at", ecore_key_string) == 0) {
+  } else if (ecore_key == "at") {
     return LWE::KeyValue::AtMarkKey;
-  } else if (strcmp("minus", ecore_key_string) == 0) {
+  } else if (ecore_key == "minus") {
     if (is_shift_pressed) {
       return LWE::KeyValue::UnderScoreMarkKey;
     } else {
       return LWE::KeyValue::MinusMarkKey;
     }
-  } else if (strcmp("equal", ecore_key_string) == 0) {
+  } else if (ecore_key == "equal") {
     if (is_shift_pressed) {
       return LWE::KeyValue::PlusMarkKey;
     } else {
       return LWE::KeyValue::EqualitySignKey;
     }
-  } else if (strcmp("bracketleft", ecore_key_string) == 0) {
+  } else if (ecore_key == "bracketleft") {
     if (is_shift_pressed) {
       return LWE::KeyValue::LeftCurlyBracketMarkKey;
     } else {
       return LWE::KeyValue::LeftSquareBracketKey;
     }
-  } else if (strcmp("bracketright", ecore_key_string) == 0) {
+  } else if (ecore_key == "bracketright") {
     if (is_shift_pressed) {
       return LWE::KeyValue::RightCurlyBracketMarkKey;
     } else {
       return LWE::KeyValue::RightSquareBracketKey;
     }
-  } else if (strcmp("semicolon", ecore_key_string) == 0) {
+  } else if (ecore_key == "semicolon") {
     if (is_shift_pressed) {
       return LWE::KeyValue::ColonMarkKey;
     } else {
       return LWE::KeyValue::SemiColonMarkKey;
     }
-  } else if (strcmp("apostrophe", ecore_key_string) == 0) {
+  } else if (ecore_key == "apostrophe") {
     if (is_shift_pressed) {
       return LWE::KeyValue::DoubleQuoteMarkKey;
     } else {
       return LWE::KeyValue::SingleQuoteMarkKey;
     }
-  } else if (strcmp("comma", ecore_key_string) == 0) {
+  } else if (ecore_key == "comma") {
     if (is_shift_pressed) {
       return LWE::KeyValue::LessThanMarkKey;
     } else {
       return LWE::KeyValue::CommaMarkKey;
     }
-  } else if (strcmp("period", ecore_key_string) == 0) {
+  } else if (ecore_key == "period") {
     if (is_shift_pressed) {
       return LWE::KeyValue::GreaterThanSignKey;
     } else {
       return LWE::KeyValue::PeriodKey;
     }
-  } else if (strcmp("slash", ecore_key_string) == 0) {
+  } else if (ecore_key == "slash") {
     if (is_shift_pressed) {
       return LWE::KeyValue::QuestionMarkKey;
     } else {
       return LWE::KeyValue::SlashKey;
     }
-  } else if (strlen(ecore_key_string) == 1) {
-    char ch = ecore_key_string[0];
+  } else if (ecore_key.length() == 1) {
+    const char ch = ecore_key.at(0);
     if (ch >= '0' && ch <= '9') {
       if (is_shift_pressed) {
         switch (ch) {
@@ -517,229 +508,146 @@ static LWE::KeyValue EcoreEventKeyToKeyValue(const char* ecore_key_string,
             return LWE::KeyValue::RightParenthesisMarkKey;
         }
       }
-      return (LWE::KeyValue)(LWE::KeyValue::Digit0Key + ch - '0');
+      return LWE::KeyValue(LWE::KeyValue::Digit0Key + ch - '0');
     } else if (ch >= 'a' && ch <= 'z') {
       if (is_shift_pressed) {
-        return (LWE::KeyValue)(LWE::KeyValue::LowerAKey + ch - 'a' - 32);
+        return LWE::KeyValue(LWE::KeyValue::LowerAKey + ch - 'a' - 32);
       } else {
-        return (LWE::KeyValue)(LWE::KeyValue::LowerAKey + ch - 'a');
+        return LWE::KeyValue(LWE::KeyValue::LowerAKey + ch - 'a');
       }
     } else if (ch >= 'A' && ch <= 'Z') {
       if (is_shift_pressed) {
-        return (LWE::KeyValue)(LWE::KeyValue::AKey + ch - 'A' + 32);
+        return LWE::KeyValue(LWE::KeyValue::AKey + ch - 'A' + 32);
       } else {
-        return (LWE::KeyValue)(LWE::KeyValue::AKey + ch - 'A');
+        return LWE::KeyValue(LWE::KeyValue::AKey + ch - 'A');
       }
     }
-  } else if (strcmp("XF86AudioRaiseVolume", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioRaiseVolume") {
     return LWE::KeyValue::TVVolumeUpKey;
-  } else if (strcmp("XF86AudioLowerVolume", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioLowerVolume") {
     return LWE::KeyValue::TVVolumeDownKey;
-  } else if (strcmp("XF86AudioMute", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioMute") {
     return LWE::KeyValue::TVMuteKey;
-  } else if (strcmp("XF86RaiseChannel", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86RaiseChannel") {
     return LWE::KeyValue::TVChannelUpKey;
-  } else if (strcmp("XF86LowerChannel", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86LowerChannel") {
     return LWE::KeyValue::TVChannelDownKey;
-  } else if (strcmp("XF86AudioRewind", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioRewind") {
     return LWE::KeyValue::MediaTrackPreviousKey;
-  } else if (strcmp("XF86AudioNext", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioNext") {
     return LWE::KeyValue::MediaTrackNextKey;
-  } else if (strcmp("XF86AudioPause", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioPause") {
     return LWE::KeyValue::MediaPauseKey;
-  } else if (strcmp("XF86AudioRecord", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioRecord") {
     return LWE::KeyValue::MediaRecordKey;
-  } else if (strcmp("XF86AudioPlay", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioPlay") {
     return LWE::KeyValue::MediaPlayKey;
-  } else if (strcmp("XF86AudioStop", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86AudioStop") {
     return LWE::KeyValue::MediaStopKey;
-  } else if (strcmp("XF86Info", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Info") {
     return LWE::KeyValue::TVInfoKey;
-  } else if (strcmp("XF86Back", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Back") {
     return LWE::KeyValue::TVReturnKey;
-  } else if (strcmp("XF86Red", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Red") {
     return LWE::KeyValue::TVRedKey;
-  } else if (strcmp("XF86Green", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Green") {
     return LWE::KeyValue::TVGreenKey;
-  } else if (strcmp("XF86Yellow", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Yellow") {
     return LWE::KeyValue::TVYellowKey;
-  } else if (strcmp("XF86Blue", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Blue") {
     return LWE::KeyValue::TVBlueKey;
-  } else if (strcmp("XF86SysMenu", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86SysMenu") {
     return LWE::KeyValue::TVMenuKey;
-  } else if (strcmp("XF86Home", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Home") {
     return LWE::KeyValue::TVHomeKey;
-  } else if (strcmp("XF86Exit", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Exit") {
     return LWE::KeyValue::TVExitKey;
-  } else if (strcmp("XF86PreviousChannel", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86PreviousChannel") {
     return LWE::KeyValue::TVPreviousChannel;
-  } else if (strcmp("XF86ChannelList", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86ChannelList") {
     return LWE::KeyValue::TVChannelList;
-  } else if (strcmp("XF86ChannelGuide", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86ChannelGuide") {
     return LWE::KeyValue::TVChannelGuide;
-  } else if (strcmp("XF86SimpleMenu", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86SimpleMenu") {
     return LWE::KeyValue::TVSimpleMenu;
-  } else if (strcmp("XF86EManual", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86EManual") {
     return LWE::KeyValue::TVEManual;
-  } else if (strcmp("XF86ExtraApp", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86ExtraApp") {
     return LWE::KeyValue::TVExtraApp;
-  } else if (strcmp("XF86Search", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Search") {
     return LWE::KeyValue::TVSearch;
-  } else if (strcmp("XF86PictureSize", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86PictureSize") {
     return LWE::KeyValue::TVPictureSize;
-  } else if (strcmp("XF86Sleep", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Sleep") {
     return LWE::KeyValue::TVSleep;
-  } else if (strcmp("XF86Caption", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Caption") {
     return LWE::KeyValue::TVCaption;
-  } else if (strcmp("XF86More", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86More") {
     return LWE::KeyValue::TVMore;
-  } else if (strcmp("XF86BTVoice", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86BTVoice") {
     return LWE::KeyValue::TVBTVoice;
-  } else if (strcmp("XF86Color", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86Color") {
     return LWE::KeyValue::TVColor;
-  } else if (strcmp("XF86PlayBack", ecore_key_string) == 0) {
+  } else if (ecore_key == "XF86PlayBack") {
     return LWE::KeyValue::TVPlayBack;
   }
-
-  LOG_DEBUG("WebViewEFL - unimplemented key %s\n", ecore_key_string);
+  LOG_WARN("Unknown key name: %s", ecore_key.c_str());
   return LWE::KeyValue::UnidentifiedKey;
 }
 
 void WebView::DispatchKeyDownEvent(Ecore_Event_Key* key_event) {
-  std::string key_name = key_event->keyname;
-  LOG_DEBUG("ECORE_EVENT_KEY_DOWN [%s, %d]\n", key_name.c_str(),
-            (key_event->modifiers & 1) || (key_event->modifiers & 2));
-
   if (!IsFocused()) {
-    LOG_DEBUG("ignore keydown because we dont have focus");
     return;
   }
 
-  if ((strcmp(key_name.c_str(), "XF86Exit") == 0) ||
-      (strcmp(key_name.c_str(), "Select") == 0) ||
-      (strcmp(key_name.c_str(), "Cancel") == 0)) {
-    if (strcmp(key_name.c_str(), "Select") == 0) {
-      webview_instance_->AddIdleCallback(
-          [](void* data) {
-            WebView* view = (WebView*)data;
-            LWE::WebContainer* self = view->GetWebViewInstance();
-            LWE::KeyValue kv = LWE::KeyValue::EnterKey;
-            self->DispatchKeyDownEvent(kv);
-            self->DispatchKeyPressEvent(kv);
-            self->DispatchKeyUpEvent(kv);
-            view->HidePanel();
-          },
-          this);
-    } else {
-      webview_instance_->AddIdleCallback(
-          [](void* data) {
-            WebView* view = (WebView*)data;
-            view->HidePanel();
-          },
-          this);
-    }
-  }
+  std::string key_name = key_event->keyname;
+  bool is_shift_pressed = key_event->modifiers & 1;
 
   struct Param {
     LWE::WebContainer* webview_instance;
     LWE::KeyValue key_value;
   };
-  Param* p = new Param();
-  p->webview_instance = webview_instance_;
-  p->key_value =
-      EcoreEventKeyToKeyValue(key_name.c_str(), (key_event->modifiers & 1));
+  Param* param = new Param();
+  param->webview_instance = webview_instance_;
+  param->key_value = KeyNameToKeyValue(key_name, is_shift_pressed);
 
   webview_instance_->AddIdleCallback(
       [](void* data) {
-        Param* p = (Param*)data;
-        p->webview_instance->DispatchKeyDownEvent(p->key_value);
-        p->webview_instance->DispatchKeyPressEvent(p->key_value);
-        delete p;
+        Param* param = reinterpret_cast<Param*>(data);
+        param->webview_instance->DispatchKeyDownEvent(param->key_value);
+        param->webview_instance->DispatchKeyPressEvent(param->key_value);
+        delete param;
       },
-      p);
+      param);
 }
 
 void WebView::DispatchKeyUpEvent(Ecore_Event_Key* key_event) {
-  std::string key_name = key_event->keyname;
-  LOG_DEBUG("ECORE_EVENT_KEY_UP [%s, %d]\n", key_name.c_str(),
-            (key_event->modifiers & 1) || (key_event->modifiers & 2));
-
   if (!IsFocused()) {
-    LOG_DEBUG("ignore keyup because we dont have focus");
     return;
   }
+
+  std::string key_name = key_event->keyname;
+  bool is_shift_pressed = key_event->modifiers & 1;
 
   struct Param {
     LWE::WebContainer* webview_instance;
     LWE::KeyValue key_value;
   };
-  Param* p = new Param();
-  p->webview_instance = webview_instance_;
-  p->key_value =
-      EcoreEventKeyToKeyValue(key_name.c_str(), (key_event->modifiers & 1));
+  Param* param = new Param();
+  param->webview_instance = webview_instance_;
+  param->key_value = KeyNameToKeyValue(key_name, is_shift_pressed);
 
   webview_instance_->AddIdleCallback(
       [](void* data) {
-        Param* p = (Param*)data;
-        p->webview_instance->DispatchKeyUpEvent(p->key_value);
-        delete p;
+        Param* param = reinterpret_cast<Param*>(data);
+        param->webview_instance->DispatchKeyUpEvent(param->key_value);
+        delete param;
       },
-      p);
-}
-
-void WebView::DispatchCompositionUpdateEvent(const char* str, int size) {
-  if (str) {
-    LOG_DEBUG("WebView::DispatchCompositionUpdateEvent [%s]", str);
-    webview_instance_->DispatchCompositionUpdateEvent(std::string(str, size));
-  }
-}
-
-void WebView::DispatchCompositionEndEvent(const char* str, int size) {
-  if (str) {
-    LOG_DEBUG("WebView::DispatchCompositionEndEvent [%s]", str);
-    webview_instance_->DispatchCompositionEndEvent(std::string(str, size));
-  }
-}
-
-void WebView::ShowPanel() {
-  LOG_DEBUG("WebView::ShowPanel()");
-  if (!context_) {
-    LOG_ERROR("Ecore_IMF_Context nullptr");
-    return;
-  }
-  ecore_imf_context_input_panel_show(context_);
-  ecore_imf_context_focus_in(context_);
-}
-
-void WebView::HidePanel() {
-  LOG_DEBUG("WebView::HidePanel()");
-  if (!context_) {
-    LOG_ERROR("Ecore_IMF_Context nullptr");
-    return;
-  }
-  ecore_imf_context_reset(context_);
-  ecore_imf_context_focus_out(context_);
-  ecore_imf_context_input_panel_hide(context_);
-}
-
-void WebView::SetSoftwareKeyboardContext(Ecore_IMF_Context* context) {
-  context_ = context;
-
-  webview_instance_->RegisterOnShowSoftwareKeyboardIfPossibleHandler(
-      [this](LWE::WebContainer* v) { ShowPanel(); });
-
-  webview_instance_->RegisterOnHideSoftwareKeyboardIfPossibleHandler(
-      [this](LWE::WebContainer*) { HidePanel(); });
-}
-
-void WebView::ClearFocus() {
-  LOG_DEBUG("WebView::ClearFocus()");
-  HidePanel();
+      param);
 }
 
 void WebView::SetDirection(int direction) {
-  LOG_DEBUG("WebView::SetDirection direction: %d\n", direction);
-  // TODO: implement this if necessary
+  // TODO: Implement if necessary.
 }
 
 void WebView::InitWebView() {

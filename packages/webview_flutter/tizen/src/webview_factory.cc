@@ -40,14 +40,8 @@ WebViewFactory::WebViewFactory(flutter::PluginRegistrar* registrar)
 
 PlatformView* WebViewFactory::Create(int view_id, double width, double height,
                                      const ByteMessage& params) {
-  flutter::EncodableValue decoded = *GetCodec().DecodeMessage(params);
-  try {
-    return new WebView(GetPluginRegistrar(), view_id, texture_registrar_, width,
-                       height, decoded);
-  } catch (const std::exception& error) {
-    LOG_ERROR("Could not create a WebView instance: %s", error.what());
-    return nullptr;
-  }
+  return new WebView(GetPluginRegistrar(), view_id, texture_registrar_, width,
+                     height, *GetCodec().DecodeMessage(params));
 }
 
 void WebViewFactory::Dispose() { LWE::LWE::Finalize(); }
