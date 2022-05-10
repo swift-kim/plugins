@@ -19,7 +19,7 @@
 #include "lwe/PlatformIntegrationData.h"
 #include "webview_factory.h"
 
-#define BUFFER_POOL_SIZE 5
+static const int32_t kBufferPoolSize = 5;
 
 extern "C" size_t LWE_EXPORT createWebViewInstance(
     unsigned x, unsigned y, unsigned width, unsigned height,
@@ -30,13 +30,13 @@ extern "C" size_t LWE_EXPORT createWebViewInstance(
     const std::function<void(::LWE::WebContainer*, bool needsFlush)>& flushCb,
     bool useSWBackend);
 
-template <typename T = flutter::EncodableValue>
-class NavigationRequestResult : public flutter::MethodResult<T> {
+class NavigationRequestResult
+    : public flutter::MethodResult<flutter::EncodableValue> {
  public:
   NavigationRequestResult(std::string url, WebView* webview)
       : url_(url), webview_(webview) {}
 
-  void SuccessInternal(const T* should_load) override {
+  void SuccessInternal(const flutter::EncodableValue* should_load) override {
     if (std::holds_alternative<bool>(*should_load)) {
       if (std::get<bool>(*should_load)) {
         LoadUrl();
@@ -46,7 +46,7 @@ class NavigationRequestResult : public flutter::MethodResult<T> {
 
   void ErrorInternal(const std::string& error_code,
                      const std::string& error_message,
-                     const T* error_details) override {
+                     const flutter::EncodableValue* error_details) override {
     throw std::invalid_argument("navigationRequest calls must succeed [code:" +
                                 error_code + "][msg:" + error_message + "]");
   }
@@ -126,13 +126,13 @@ static std::string ErrorCodeToString(int error_code) {
 }
 
 template <typename T>
-bool GetValueFromEncodableMap(const flutter::EncodableValue& arguments,
-                              std::string key, T* out) {
-  if (auto pmap = std::get_if<flutter::EncodableMap>(&arguments)) {
-    auto iter = pmap->find(flutter::EncodableValue(key));
-    if (iter != pmap->end() && !iter->second.IsNull()) {
-      if (auto pval = std::get_if<T>(&iter->second)) {
-        *out = *pval;
+static bool GetValueFromEncodableMap(const flutter::EncodableValue& arguments,
+                                     std::string key, T* out) {
+  if (auto map = std::get_if<flutter::EncodableMap>(&arguments)) {
+    auto iter = map->find(flutter::EncodableValue(key));
+    if (iter != map->end() && !iter->second.IsNull()) {
+      if (auto* value = std::get_if<T>(&iter->second)) {
+        *out = *value;
         return true;
       }
     }
@@ -140,12 +140,12 @@ bool GetValueFromEncodableMap(const flutter::EncodableValue& arguments,
   return false;
 }
 
-bool NeedsSwBackend(void) {
+static bool IsEmulator() {
   bool result = false;
   char* value = nullptr;
   int ret = system_info_get_platform_string(
       "http://tizen.org/system/model_name", &value);
-  if ((SYSTEM_INFO_ERROR_NONE == ret) && (0 == strcmp(value, "Emulator"))) {
+  if (ret == SYSTEM_INFO_ERROR_NONE && strcmp(value, "Emulator") == 0) {
     result = true;
   }
   if (value) {
@@ -156,7 +156,7 @@ bool NeedsSwBackend(void) {
 
 WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
                  flutter::TextureRegistrar* texture_registrar, double width,
-                 double height, flutter::EncodableMap& params)
+                 double height, const flutter::EncodableValue& params)
     : PlatformView(registrar, viewId, nullptr),
       texture_registrar_(texture_registrar),
       webview_instance_(nullptr),
@@ -168,20 +168,22 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
       is_mouse_lbutton_down_(false),
       has_navigation_delegate_(false),
       has_progress_tracking_(false),
-      context_(nullptr),
-      texture_variant_(nullptr) {
-  use_sw_backend_ = NeedsSwBackend();
+      context_(nullptr) {
+  use_sw_backend_ = IsEmulator();
   if (use_sw_backend_) {
     tbm_pool_ = std::make_unique<SingleBufferPool>(width, height);
   } else {
-    tbm_pool_ = std::make_unique<BufferPool>(width, height, BUFFER_POOL_SIZE);
+    tbm_pool_ = std::make_unique<BufferPool>(width, height, kBufferPoolSize);
   }
 
-  texture_variant_ = new flutter::TextureVariant(flutter::GpuBufferTexture(
-      [this](size_t width, size_t height) -> const FlutterDesktopGpuBuffer* {
-        return this->ObtainGpuBuffer(width, height);
-      }));
-  SetTextureId(texture_registrar_->RegisterTexture(texture_variant_));
+  texture_variant_ =
+      std::make_unique<flutter::TextureVariant>(flutter::GpuBufferTexture(
+          [this](size_t width,
+                 size_t height) -> const FlutterDesktopGpuBuffer* {
+            return ObtainGpuBuffer(width, height);
+          }));
+  SetTextureId(texture_registrar_->RegisterTexture(texture_variant_.get()));
+
   InitWebView();
 
   channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -203,106 +205,82 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
       });
 
   std::string url;
-  auto initial_url = params[flutter::EncodableValue("initialUrl")];
-  if (std::holds_alternative<std::string>(initial_url)) {
-    url = std::get<std::string>(initial_url);
-  } else {
+  if (!GetValueFromEncodableMap(params, "initialUrl", &url)) {
     url = "about:blank";
   }
 
-  auto backgroundColor = params[flutter::EncodableValue("backgroundColor")];
-  if (std::holds_alternative<int>(backgroundColor)) {
-    auto color = std::get<int>(backgroundColor);
-    auto settings = webview_instance_->GetSettings();
+  int32_t color;
+  if (GetValueFromEncodableMap(params, "backgroundColor", &color)) {
+    LWE::Settings settings = webview_instance_->GetSettings();
     settings.SetBaseBackgroundColor(color >> 16 & 0xff, color >> 8 & 0xff,
                                     color & 0xff, color >> 24 & 0xff);
     webview_instance_->SetSettings(settings);
   }
 
-  auto settings = params[flutter::EncodableValue("settings")];
-  if (std::holds_alternative<flutter::EncodableMap>(settings)) {
-    auto settingList = std::get<flutter::EncodableMap>(settings);
-    if (settingList.size() > 0) {
-      ApplySettings(settingList);
-    }
+  flutter::EncodableMap settings;
+  if (GetValueFromEncodableMap(params, "settings", &settings)) {
+    ApplySettings(settings);
   }
 
-  auto names = params[flutter::EncodableValue("javascriptChannelNames")];
-  if (std::holds_alternative<flutter::EncodableList>(names)) {
-    auto name_list = std::get<flutter::EncodableList>(names);
-    for (size_t i = 0; i < name_list.size(); i++) {
-      if (std::holds_alternative<std::string>(name_list[i])) {
-        RegisterJavaScriptChannelName(std::get<std::string>(name_list[i]));
+  flutter::EncodableList names;
+  if (GetValueFromEncodableMap(params, "javascriptChannelNames", &names)) {
+    for (flutter::EncodableValue name : names) {
+      if (std::holds_alternative<std::string>(name)) {
+        RegisterJavaScriptChannelName(std::get<std::string>(name));
       }
     }
   }
 
-  // TODO: Not implemented
-  // auto media = params[flutter::EncodableValue("autoMediaPlaybackPolicy")];
+  // TODO(bwikbs): Implement autoMediaPlaybackPolicy.
 
-  auto user_agent = params[flutter::EncodableValue("userAgent")];
-  if (std::holds_alternative<std::string>(user_agent)) {
-    auto settings = webview_instance_->GetSettings();
-    settings.SetUserAgentString(std::get<std::string>(user_agent));
+  std::string user_agent;
+  if (GetValueFromEncodableMap(params, "userAgent", &user_agent)) {
+    LWE::Settings settings = webview_instance_->GetSettings();
+    settings.SetUserAgentString(user_agent);
     webview_instance_->SetSettings(settings);
   }
 
   webview_instance_->RegisterOnPageStartedHandler(
       [this](LWE::WebContainer* container, const std::string& url) {
-        LOG_DEBUG("RegisterOnPageStartedHandler(url: %s)\n", url.c_str());
-        flutter::EncodableMap map;
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("url"), flutter::EncodableValue(url)));
-        auto args = std::make_unique<flutter::EncodableValue>(map);
-        channel_->InvokeMethod("onPageStarted", std::move(args));
+        flutter::EncodableMap args = {
+            {flutter::EncodableValue("url"), flutter::EncodableValue(url)}};
+        channel_->InvokeMethod("onPageStarted",
+                               std::make_unique<flutter::EncodableValue>(args));
       });
+
   webview_instance_->RegisterOnPageLoadedHandler(
       [this](LWE::WebContainer* container, const std::string& url) {
-        LOG_DEBUG("RegisterOnPageLoadedHandler(url: %s)(title:%s)\n",
-                  url.c_str(), container->GetTitle().c_str());
-        flutter::EncodableMap map;
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("url"), flutter::EncodableValue(url)));
-        auto args = std::make_unique<flutter::EncodableValue>(map);
-        channel_->InvokeMethod("onPageFinished", std::move(args));
+        flutter::EncodableMap args = {
+            {flutter::EncodableValue("url"), flutter::EncodableValue(url)}};
+        channel_->InvokeMethod("onPageFinished",
+                               std::make_unique<flutter::EncodableValue>(args));
       });
+
   webview_instance_->RegisterOnProgressChangedHandler(
       [this](LWE::WebContainer* container, int progress) {
-        LOG_DEBUG("RegisterOnProgressChangedHandler(progress:%d)\n", progress);
         if (!has_progress_tracking_) {
           return;
         }
-        flutter::EncodableMap map;
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("progress"),
-                flutter::EncodableValue(progress)));
-        auto args = std::make_unique<flutter::EncodableValue>(map);
-        channel_->InvokeMethod("onProgress", std::move(args));
+        flutter::EncodableMap args = {{flutter::EncodableValue("progress"),
+                                       flutter::EncodableValue(progress)}};
+        channel_->InvokeMethod("onProgress",
+                               std::make_unique<flutter::EncodableValue>(args));
       });
+
   webview_instance_->RegisterOnReceivedErrorHandler(
-      [this](LWE::WebContainer* container, LWE::ResourceError e) {
-        flutter::EncodableMap map;
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("errorCode"),
-                flutter::EncodableValue(e.GetErrorCode())));
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("description"),
-                flutter::EncodableValue(e.GetDescription())));
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("errorType"),
-                flutter::EncodableValue(ErrorCodeToString(e.GetErrorCode()))));
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("failingUrl"),
-                flutter::EncodableValue(e.GetUrl())));
-        auto args = std::make_unique<flutter::EncodableValue>(map);
-        channel_->InvokeMethod("onWebResourceError", std::move(args));
+      [this](LWE::WebContainer* container, LWE::ResourceError error) {
+        flutter::EncodableMap args = {
+            {flutter::EncodableValue("errorCode"),
+             flutter::EncodableValue(error.GetErrorCode())},
+            {flutter::EncodableValue("description"),
+             flutter::EncodableValue(error.GetDescription())},
+            {flutter::EncodableValue("errorType"),
+             flutter::EncodableValue(ErrorCodeToString(error.GetErrorCode()))},
+            {flutter::EncodableValue("failingUrl"),
+             flutter::EncodableValue(error.GetUrl())},
+        };
+        channel_->InvokeMethod("onWebResourceError",
+                               std::make_unique<flutter::EncodableValue>(args));
       });
 
   webview_instance_->RegisterShouldOverrideUrlLoadingHandler(
@@ -310,28 +288,22 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int viewId,
         if (!has_navigation_delegate_) {
           return false;
         }
-        flutter::EncodableMap map;
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("url"), flutter::EncodableValue(url)));
-        map.insert(
-            std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-                flutter::EncodableValue("isForMainFrame"),
-                flutter::EncodableValue(true)));
-        auto args = std::make_unique<flutter::EncodableValue>(map);
-        auto on_result =
-            std::make_unique<NavigationRequestResult<flutter::EncodableValue>>(
-                url, this);
-        channel_->InvokeMethod("navigationRequest", std::move(args),
-                               std::move(on_result));
-
+        flutter::EncodableMap args = {
+            {flutter::EncodableValue("url"), flutter::EncodableValue(url)},
+            {flutter::EncodableValue("isForMainFrame"),
+             flutter::EncodableValue(true)},
+        };
+        auto result = std::make_unique<NavigationRequestResult>(url, this);
+        channel_->InvokeMethod("navigationRequest",
+                               std::make_unique<flutter::EncodableValue>(args),
+                               std::move(result));
         return true;
       });
 
   webview_instance_->LoadURL(url);
 }
 
-void WebView::ApplySettings(flutter::EncodableMap settings) {
+void WebView::ApplySettings(const flutter::EncodableMap& settings) {
   for (auto const& [key, val] : settings) {
     if (std::holds_alternative<std::string>(key)) {
       std::string k = std::get<std::string>(key);
@@ -374,24 +346,19 @@ void WebView::ApplySettings(flutter::EncodableMap settings) {
  * message over a method channel to the Dart code.
  */
 void WebView::RegisterJavaScriptChannelName(const std::string& name) {
-  LOG_DEBUG("RegisterJavaScriptChannelName(channelName: %s)\n", name.c_str());
+  LOG_DEBUG("Register a JavaScript channel: %s", name.c_str());
 
-  std::function<std::string(const std::string&)> cb =
-      [this, name](const std::string& message) -> std::string {
-    LOG_DEBUG("Invoke JavaScriptChannel(message: %s)\n", message.c_str());
-    flutter::EncodableMap map;
-    map.insert(std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-        flutter::EncodableValue("channel"), flutter::EncodableValue(name)));
-    map.insert(std::make_pair<flutter::EncodableValue, flutter::EncodableValue>(
-        flutter::EncodableValue("message"), flutter::EncodableValue(message)));
-
-    std::unique_ptr<flutter::EncodableValue> args =
-        std::make_unique<flutter::EncodableValue>(map);
-    channel_->InvokeMethod("javascriptChannelMessage", std::move(args));
+  auto on_message = [this, name](const std::string& message) -> std::string {
+    LOG_DEBUG("JavaScript channel message: %s", message.c_str());
+    flutter::EncodableMap args = {
+        {flutter::EncodableValue("channel"), flutter::EncodableValue(name)},
+        {flutter::EncodableValue("message"), flutter::EncodableValue(message)},
+    };
+    channel_->InvokeMethod("javascriptChannelMessage",
+                           std::make_unique<flutter::EncodableValue>(args));
     return "success";
   };
-
-  webview_instance_->AddJavaScriptInterface(name, "postMessage", cb);
+  webview_instance_->AddJavaScriptInterface(name, "postMessage", on_message);
 }
 
 WebView::~WebView() { Dispose(); }
@@ -406,11 +373,6 @@ void WebView::Dispose() {
   if (webview_instance_) {
     webview_instance_->Destroy();
     webview_instance_ = nullptr;
-  }
-
-  if (texture_variant_) {
-    delete texture_variant_;
-    texture_variant_ = nullptr;
   }
 }
 
@@ -781,7 +743,7 @@ void WebView::SetDirection(int direction) {
 }
 
 void WebView::InitWebView() {
-  if (webview_instance_ != nullptr) {
+  if (webview_instance_) {
     webview_instance_->Destroy();
     webview_instance_ = nullptr;
   }
@@ -819,7 +781,7 @@ void WebView::InitWebView() {
       use_sw_backend_);
 
 #ifndef TV_PROFILE
-  auto settings = webview_instance_->GetSettings();
+  LWE::Settings settings = webview_instance_->GetSettings();
   settings.SetUserAgentString(
       "Mozilla/5.0 (like Gecko/54.0 Firefox/54.0) Mobile");
   webview_instance_->SetSettings(settings);
@@ -835,7 +797,7 @@ void WebView::HandleMethodCall(
   const auto method_name = method_call.method_name();
   const auto& arguments = *method_call.arguments();
 
-  LOG_DEBUG("WebView::HandleMethodCall : %s \n ", method_name.c_str());
+  LOG_DEBUG("HandleMethodCall: %s", method_name.c_str());
 
   if (method_name.compare("loadUrl") == 0) {
     std::string url;

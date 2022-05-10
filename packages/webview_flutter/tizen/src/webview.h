@@ -31,7 +31,7 @@ class WebView : public PlatformView {
  public:
   WebView(flutter::PluginRegistrar* registrar, int viewId,
           flutter::TextureRegistrar* textureRegistrar, double width,
-          double height, flutter::EncodableMap& params);
+          double height, const flutter::EncodableValue& params);
   ~WebView();
 
   virtual void Dispose() override;
@@ -67,7 +67,7 @@ class WebView : public PlatformView {
   void InitWebView();
 
   void RegisterJavaScriptChannelName(const std::string& name);
-  void ApplySettings(flutter::EncodableMap);
+  void ApplySettings(const flutter::EncodableMap& settings);
 
   flutter::TextureRegistrar* texture_registrar_;
   LWE::WebContainer* webview_instance_;
@@ -81,7 +81,7 @@ class WebView : public PlatformView {
   bool has_progress_tracking_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   Ecore_IMF_Context* context_;
-  flutter::TextureVariant* texture_variant_;
+  std::unique_ptr<flutter::TextureVariant> texture_variant_;
   std::mutex mutex_;
   std::unique_ptr<BufferPool> tbm_pool_;
   bool use_sw_backend_;
