@@ -54,7 +54,7 @@ class NavigationRequestResult
 
  private:
   void LoadUrl() {
-    if (webview_->GetWebViewInstance()) {
+    if (webview_ && webview_->GetWebViewInstance()) {
       webview_->GetWebViewInstance()->LoadURL(url_);
     }
   }
@@ -121,9 +121,9 @@ static std::string ErrorCodeToString(int error_code) {
 }
 
 template <typename T>
-static bool GetValueFromEncodableMap(const flutter::EncodableValue& arguments,
+static bool GetValueFromEncodableMap(const flutter::EncodableValue* arguments,
                                      std::string key, T* out) {
-  if (auto map = std::get_if<flutter::EncodableMap>(&arguments)) {
+  if (auto map = std::get_if<flutter::EncodableMap>(arguments)) {
     auto iter = map->find(flutter::EncodableValue(key));
     if (iter != map->end() && !iter->second.IsNull()) {
       if (auto* value = std::get_if<T>(&iter->second)) {
@@ -192,12 +192,12 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int view_id,
       });
 
   std::string url;
-  if (!GetValueFromEncodableMap(params, "initialUrl", &url)) {
+  if (!GetValueFromEncodableMap(&params, "initialUrl", &url)) {
     url = "about:blank";
   }
 
   int color;
-  if (GetValueFromEncodableMap(params, "backgroundColor", &color)) {
+  if (GetValueFromEncodableMap(&params, "backgroundColor", &color)) {
     LWE::Settings settings = webview_instance_->GetSettings();
     settings.SetBaseBackgroundColor(color >> 16 & 0xff, color >> 8 & 0xff,
                                     color & 0xff, color >> 24 & 0xff);
@@ -205,12 +205,12 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int view_id,
   }
 
   flutter::EncodableMap settings;
-  if (GetValueFromEncodableMap(params, "settings", &settings)) {
+  if (GetValueFromEncodableMap(&params, "settings", &settings)) {
     ApplySettings(settings);
   }
 
   flutter::EncodableList names;
-  if (GetValueFromEncodableMap(params, "javascriptChannelNames", &names)) {
+  if (GetValueFromEncodableMap(&params, "javascriptChannelNames", &names)) {
     for (flutter::EncodableValue name : names) {
       if (std::holds_alternative<std::string>(name)) {
         RegisterJavaScriptChannelName(std::get<std::string>(name));
@@ -221,7 +221,7 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int view_id,
   // TODO: Implement autoMediaPlaybackPolicy.
 
   std::string user_agent;
-  if (GetValueFromEncodableMap(params, "userAgent", &user_agent)) {
+  if (GetValueFromEncodableMap(&params, "userAgent", &user_agent)) {
     LWE::Settings settings = webview_instance_->GetSettings();
     settings.SetUserAgentString(user_agent);
     webview_instance_->SetSettings(settings);
