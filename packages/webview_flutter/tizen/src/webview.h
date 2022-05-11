@@ -21,9 +21,7 @@ namespace LWE {
 class WebContainer;
 }
 
-class TextInputChannel;
 class BufferPool;
-class SingleBufferPool;
 class BufferUnit;
 
 class WebView : public PlatformView {
@@ -34,10 +32,12 @@ class WebView : public PlatformView {
   ~WebView();
 
   virtual void Dispose() override;
+
   virtual void Resize(double width, double height) override;
   virtual void Touch(int type, int button, double x, double y, double dx,
                      double dy) override;
   virtual void SetDirection(int direction) override;
+
   virtual void ClearFocus() override {}
 
   virtual void DispatchKeyDownEvent(Ecore_Event_Key* key) override;
@@ -54,14 +54,15 @@ class WebView : public PlatformView {
   void HandleCookieMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+  void ApplySettings(const flutter::EncodableMap& settings);
+  void RegisterJavaScriptChannelName(const std::string& name);
   std::string GetChannelName();
+
   void InitWebView();
 
-  void RegisterJavaScriptChannelName(const std::string& name);
-  void ApplySettings(const flutter::EncodableMap& settings);
-
-  flutter::TextureRegistrar* texture_registrar_;
   LWE::WebContainer* webview_instance_ = nullptr;
+  flutter::TextureRegistrar* texture_registrar_;
   double width_;
   double height_;
   BufferUnit* working_surface_ = nullptr;

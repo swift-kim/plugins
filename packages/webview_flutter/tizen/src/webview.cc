@@ -19,7 +19,7 @@
 #include "lwe/PlatformIntegrationData.h"
 #include "webview_factory.h"
 
-static const int32_t kBufferPoolSize = 5;
+static const size_t kBufferPoolSize = 5;
 
 extern "C" size_t LWE_EXPORT createWebViewInstance(
     unsigned x, unsigned y, unsigned width, unsigned height,
@@ -196,7 +196,7 @@ WebView::WebView(flutter::PluginRegistrar* registrar, int view_id,
     url = "about:blank";
   }
 
-  int32_t color;
+  int color;
   if (GetValueFromEncodableMap(params, "backgroundColor", &color)) {
     LWE::Settings settings = webview_instance_->GetSettings();
     settings.SetBaseBackgroundColor(color >> 16 & 0xff, color >> 8 & 0xff,
@@ -656,37 +656,38 @@ void WebView::InitWebView() {
     webview_instance_ = nullptr;
   }
 
-  float scale_factor = 1;
+  float pixel_ratio = 1.0;
 
-  webview_instance_ = (LWE::WebContainer*)createWebViewInstance(
-      0, 0, width_, height_, scale_factor, "SamsungOneUI", "ko-KR",
-      "Asia/Seoul",
-      [this]() -> LWE::WebContainer::ExternalImageInfo {
-        std::lock_guard<std::mutex> lock(mutex_);
-        LWE::WebContainer::ExternalImageInfo result;
-        if (!working_surface_) {
-          working_surface_ = tbm_pool_->GetAvailableBuffer();
-        }
-        if (working_surface_) {
-          result.imageAddress = static_cast<void*>(working_surface_->Surface());
-        } else {
-          result.imageAddress = nullptr;
-        }
-        return result;
-      },
-      [this](LWE::WebContainer* c, bool isRendered) {
-        if (isRendered) {
-          std::lock_guard<std::mutex> lock(mutex_);
-          if (candidate_surface_) {
-            tbm_pool_->Release(candidate_surface_);
-            candidate_surface_ = nullptr;
-          }
-          candidate_surface_ = working_surface_;
-          working_surface_ = nullptr;
-          texture_registrar_->MarkTextureFrameAvailable(GetTextureId());
-        }
-      },
-      use_sw_backend_);
+  auto on_prepare_image = [this]() -> LWE::WebContainer::ExternalImageInfo {
+    std::lock_guard<std::mutex> lock(mutex_);
+    LWE::WebContainer::ExternalImageInfo result;
+    if (!working_surface_) {
+      working_surface_ = tbm_pool_->GetAvailableBuffer();
+    }
+    if (working_surface_) {
+      result.imageAddress = working_surface_->Surface();
+    } else {
+      result.imageAddress = nullptr;
+    }
+    return result;
+  };
+  auto on_flush = [this](LWE::WebContainer* container, bool is_rendered) {
+    if (is_rendered) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (candidate_surface_) {
+        tbm_pool_->Release(candidate_surface_);
+        candidate_surface_ = nullptr;
+      }
+      candidate_surface_ = working_surface_;
+      working_surface_ = nullptr;
+      texture_registrar_->MarkTextureFrameAvailable(GetTextureId());
+    }
+  };
+
+  webview_instance_ =
+      reinterpret_cast<LWE::WebContainer*>(createWebViewInstance(
+          0, 0, width_, height_, pixel_ratio, "SamsungOneUI", "ko-KR",
+          "Asia/Seoul", on_prepare_image, on_flush, use_sw_backend_));
 
 #ifndef TV_PROFILE
   LWE::Settings settings = webview_instance_->GetSettings();
@@ -699,162 +700,154 @@ void WebView::InitWebView() {
 void WebView::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue>& method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  if (!webview_instance_ || !method_call.arguments()) {
+  if (!webview_instance_) {
+    result->Error("Invalid operation",
+                  "The webview instance has not been initialized.");
     return;
   }
-  const auto method_name = method_call.method_name();
-  const auto& arguments = *method_call.arguments();
 
-  LOG_DEBUG("HandleMethodCall: %s", method_name.c_str());
+  const std::string& method_name = method_call.method_name();
+  const flutter::EncodableValue* arguments = method_call.arguments();
 
-  if (method_name.compare("loadUrl") == 0) {
+  if (method_name == "loadUrl") {
     std::string url;
     if (GetValueFromEncodableMap(arguments, "url", &url)) {
       webview_instance_->LoadURL(url);
       result->Success();
-      return;
+    } else {
+      result->Error("Invalid argument", "No url provided.");
     }
-    result->Error("InvalidArguments", "Please set 'url' properly");
-  } else if (method_name.compare("updateSettings") == 0) {
-    if (std::holds_alternative<flutter::EncodableMap>(arguments)) {
-      auto settings = std::get<flutter::EncodableMap>(arguments);
-      if (settings.size() > 0) {
-        try {
-          ApplySettings(settings);
-        } catch (const std::invalid_argument& ex) {
-          LOG_ERROR("[Exception] %s\n", ex.what());
-          result->Error(ex.what());
-          return;
-        }
-      }
+  } else if (method_name == "updateSettings") {
+    const auto* settings = std::get_if<flutter::EncodableMap>(arguments);
+    if (settings) {
+      ApplySettings(*settings);
     }
     result->Success();
-  } else if (method_name.compare("canGoBack") == 0) {
+  } else if (method_name == "canGoBack") {
     result->Success(flutter::EncodableValue(webview_instance_->CanGoBack()));
-  } else if (method_name.compare("canGoForward") == 0) {
+  } else if (method_name == "canGoForward") {
     result->Success(flutter::EncodableValue(webview_instance_->CanGoForward()));
-  } else if (method_name.compare("goBack") == 0) {
+  } else if (method_name == "goBack") {
     webview_instance_->GoBack();
     result->Success();
-  } else if (method_name.compare("goForward") == 0) {
+  } else if (method_name == "goForward") {
     webview_instance_->GoForward();
     result->Success();
-  } else if (method_name.compare("reload") == 0) {
+  } else if (method_name == "reload") {
     webview_instance_->Reload();
     result->Success();
-  } else if (method_name.compare("currentUrl") == 0) {
+  } else if (method_name == "currentUrl") {
     result->Success(flutter::EncodableValue(webview_instance_->GetURL()));
-  } else if (method_name.compare("evaluateJavascript") == 0 ||
-             method_name.compare("runJavascriptReturningResult") == 0 ||
-             method_name.compare("runJavascript") == 0) {
-    if (std::holds_alternative<std::string>(arguments)) {
-      std::string js_string = std::get<std::string>(arguments);
-      bool returns_value =
-          method_name.compare("runJavascript") == 0 ? false : true;
-      webview_instance_->EvaluateJavaScript(
-          js_string,
-          [res = result.release(), returns_value](std::string value) {
-            LOG_DEBUG("value: %s\n", value.c_str());
-            if (res) {
-              if (returns_value) {
-                res->Success(flutter::EncodableValue(value));
-              } else {
-                res->Success();
-              }
-              delete res;
-            }
-          });
+  } else if (method_name == "evaluateJavascript" ||
+             method_name == "runJavascriptReturningResult" ||
+             method_name == "runJavascript") {
+    const auto* script = std::get_if<std::string>(arguments);
+    if (script) {
+      bool should_return = method_name != "runJavascript";
+      auto on_result = [result = result.release(),
+                        should_return](std::string value) {
+        LOG_DEBUG("JavaScript evaluation result: %s", value.c_str());
+        if (result) {
+          if (should_return) {
+            result->Success(flutter::EncodableValue(value));
+          } else {
+            result->Success();
+          }
+          delete result;
+        }
+      };
+      webview_instance_->EvaluateJavaScript(*script, on_result);
     } else {
-      result->Error("InvalidArguments", "Please set javascript string");
+      result->Error("Invalid argument", "The argument must be a string.");
     }
-  } else if (method_name.compare("addJavascriptChannels") == 0) {
-    if (std::holds_alternative<flutter::EncodableList>(arguments)) {
-      auto name_list = std::get<flutter::EncodableList>(arguments);
-      for (size_t i = 0; i < name_list.size(); i++) {
-        if (std::holds_alternative<std::string>(name_list[i])) {
-          RegisterJavaScriptChannelName(std::get<std::string>(name_list[i]));
+  } else if (method_name == "addJavascriptChannels") {
+    const auto* channels = std::get_if<flutter::EncodableList>(arguments);
+    if (channels) {
+      for (flutter::EncodableValue channel : *channels) {
+        if (std::holds_alternative<std::string>(channel)) {
+          RegisterJavaScriptChannelName(std::get<std::string>(channel));
         }
       }
     }
     result->Success();
-  } else if (method_name.compare("removeJavascriptChannels") == 0) {
-    if (std::holds_alternative<flutter::EncodableList>(arguments)) {
-      auto name_list = std::get<flutter::EncodableList>(arguments);
-      for (size_t i = 0; i < name_list.size(); i++) {
-        if (std::holds_alternative<std::string>(name_list[i])) {
+  } else if (method_name == "removeJavascriptChannels") {
+    const auto* channels = std::get_if<flutter::EncodableList>(arguments);
+    if (channels) {
+      for (flutter::EncodableValue channel : *channels) {
+        if (std::holds_alternative<std::string>(channel)) {
           webview_instance_->RemoveJavascriptInterface(
-              std::get<std::string>(name_list[i]), "postMessage");
+              std::get<std::string>(channel), "postMessage");
         }
       }
     }
     result->Success();
-  } else if (method_name.compare("clearCache") == 0) {
+  } else if (method_name == "clearCache") {
     webview_instance_->ClearCache();
     result->Success();
-  } else if (method_name.compare("getTitle") == 0) {
+  } else if (method_name == "getTitle") {
     result->Success(flutter::EncodableValue(webview_instance_->GetTitle()));
-  } else if (method_name.compare("scrollTo") == 0) {
+  } else if (method_name == "scrollTo") {
     int x = 0, y = 0;
     if (GetValueFromEncodableMap(arguments, "x", &x) &&
         GetValueFromEncodableMap(arguments, "y", &y)) {
       webview_instance_->ScrollTo(x, y);
       result->Success();
-      return;
+    } else {
+      result->Error("Invalid argument", "No x or y provided.");
     }
-    result->Error("InvalidArguments", "Please set 'x' or 'y' properly");
-  } else if (method_name.compare("scrollBy") == 0) {
+  } else if (method_name == "scrollBy") {
     int x = 0, y = 0;
     if (GetValueFromEncodableMap(arguments, "x", &x) &&
         GetValueFromEncodableMap(arguments, "y", &y)) {
       webview_instance_->ScrollBy(x, y);
       result->Success();
-      return;
+    } else {
+      result->Error("Invalid argument", "No x or y provided.");
     }
-    result->Error("InvalidArguments", "Please set 'x' or 'y' properly");
-  } else if (method_name.compare("getScrollX") == 0) {
+  } else if (method_name == "getScrollX") {
     result->Success(flutter::EncodableValue(webview_instance_->GetScrollX()));
-  } else if (method_name.compare("getScrollY") == 0) {
+  } else if (method_name == "getScrollY") {
     result->Success(flutter::EncodableValue(webview_instance_->GetScrollY()));
-  } else if (method_name.compare("loadFlutterAsset") == 0) {
-    if (std::holds_alternative<std::string>(arguments)) {
-      std::string key = std::get<std::string>(arguments);
-      std::string path;
-      char* resPath = app_get_resource_path();
-      if (resPath) {
-        path = std::string("file://") + resPath + "flutter_assets/" + key;
-        free(resPath);
-        webview_instance_->LoadURL(path);
+  } else if (method_name == "loadFlutterAsset") {
+    const auto* key = std::get_if<std::string>(arguments);
+    if (key) {
+      char* res_path = app_get_resource_path();
+      if (res_path) {
+        std::string url =
+            std::string("file://") + res_path + "flutter_assets/" + *key;
+        free(res_path);
+        webview_instance_->LoadURL(url);
         result->Success();
-        return;
+      } else {
+        result->Error("Operation failed",
+                      "Could not get the flutter_assets path.");
       }
+    } else {
+      result->Error("Invalid argument", "The argument must be a string.");
     }
-    result->Error("InvalidArguments", "Please set 'key' properly");
-  } else if (method_name.compare("loadHtmlString") == 0) {
-    std::string html;
-    std::string baseUrl;
+  } else if (method_name == "loadHtmlString") {
+    std::string html, base_url;
     if (!GetValueFromEncodableMap(arguments, "html", &html)) {
-      result->Error("InvalidArguments", "Please set 'html' properly");
+      result->Error("Invalid argument", "No html provided.");
       return;
     }
-    if (GetValueFromEncodableMap(arguments, "baseUrl", &baseUrl)) {
-      LOG_DEBUG(
-          "loadHtmlString : baseUrl is not yet supported. It will be "
-          "ignored.\n ");
+    if (GetValueFromEncodableMap(arguments, "baseUrl", &base_url)) {
+      LOG_WARN("loadHtmlString: baseUrl is not supported and will be ignored.");
     }
     webview_instance_->LoadData(html);
     result->Success();
-  } else if (method_name.compare("loadFile") == 0) {
-    if (std::holds_alternative<std::string>(arguments)) {
-      std::string absoluteFilePath =
-          std::string("file://") + std::get<std::string>(arguments);
-      webview_instance_->LoadURL(absoluteFilePath);
+  } else if (method_name == "loadFile") {
+    const auto* file_path = std::get_if<std::string>(arguments);
+    if (file_path) {
+      std::string url = std::string("file://") + *file_path;
+      webview_instance_->LoadURL(url);
       result->Success();
-      return;
+    } else {
+      result->Error("Invalid argument", "The argument must be a string.");
     }
-    result->Error("InvalidArguments", "Please set 'absoluteFilePath' properly");
-  } else if (method_name.compare("loadRequest") == 0) {
+  } else if (method_name == "loadRequest") {
     result->NotImplemented();
-  } else if (method_name.compare("setCookie") == 0) {
+  } else if (method_name == "setCookie") {
     result->NotImplemented();
   } else {
     result->NotImplemented();
@@ -864,16 +857,15 @@ void WebView::HandleMethodCall(
 void WebView::HandleCookieMethodCall(
     const flutter::MethodCall<flutter::EncodableValue>& method_call,
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  if (webview_instance_ == nullptr) {
-    result->Error("Not Webview created");
+  if (!webview_instance_) {
+    result->Error("Invalid operation",
+                  "The webview instance has not been initialized.");
     return;
   }
 
-  const auto method_name = method_call.method_name();
+  const std::string& method_name = method_call.method_name();
 
-  LOG_DEBUG("WebView::HandleMethodCall : %s \n ", method_name.c_str());
-
-  if (method_name.compare("clearCookies") == 0) {
+  if (method_name == "clearCookies") {
     LWE::CookieManager* cookie = LWE::CookieManager::GetInstance();
     cookie->ClearCookies();
     result->Success(flutter::EncodableValue(true));
