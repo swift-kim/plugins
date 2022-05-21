@@ -16,7 +16,7 @@
 
 #include "flutter_texture_registrar.h"
 #include "log.h"
-#include "message.h"
+#include "messages.h"
 #include "video_player.h"
 #include "video_player_error.h"
 #include "video_player_options.h"
@@ -31,18 +31,27 @@ class VideoPlayerTizenPlugin : public flutter::Plugin, public VideoPlayerApi {
   VideoPlayerTizenPlugin(flutter::PluginRegistrar *registrar);
   virtual ~VideoPlayerTizenPlugin();
 
-  virtual void initialize() override;
-  virtual TextureMessage create(const CreateMessage &createMsg) override;
-  virtual void dispose(const TextureMessage &textureMsg) override;
-  virtual void setLooping(const LoopingMessage &loopingMsg) override;
-  virtual void setVolume(const VolumeMessage &volumeMsg) override;
-  virtual void setPlaybackSpeed(const PlaybackSpeedMessage &speedMsg) override;
-  virtual void play(const TextureMessage &textureMsg) override;
-  virtual void pause(const TextureMessage &textureMsg) override;
-  virtual PositionMessage position(const TextureMessage &textureMsg) override;
-  virtual void seekTo(const PositionMessage &positionMsg,
-                      const SeekCompletedCallback &onSeekCompleted) override;
-  virtual void setMixWithOthers(
+  virtual std::optional<FlutterError> initialize() override;
+  virtual ErrorOr<std::unique_ptr<TextureMessage>> create(
+      const CreateMessage &createMsg) override;
+  virtual std::optional<FlutterError> dispose(
+      const TextureMessage &textureMsg) override;
+  virtual std::optional<FlutterError> setLooping(
+      const LoopingMessage &loopingMsg) override;
+  virtual std::optional<FlutterError> setVolume(
+      const VolumeMessage &volumeMsg) override;
+  virtual std::optional<FlutterError> setPlaybackSpeed(
+      const PlaybackSpeedMessage &speedMsg) override;
+  virtual std::optional<FlutterError> play(
+      const TextureMessage &textureMsg) override;
+  virtual std::optional<FlutterError> pause(
+      const TextureMessage &textureMsg) override;
+  virtual ErrorOr<std::unique_ptr<PositionMessage>> position(
+      const TextureMessage &textureMsg) override;
+  virtual std::optional<FlutterError> seekTo(
+      const PositionMessage &positionMsg,
+      const SeekCompletedCallback &onSeekCompleted) override;
+  virtual std::optional<FlutterError> setMixWithOthers(
       const MixWithOthersMessage &mixWithOthersMsg) override;
 
  private:
@@ -79,13 +88,16 @@ void VideoPlayerTizenPlugin::DisposeAllPlayers() {
   players_.clear();
 }
 
-void VideoPlayerTizenPlugin::initialize() {
+std::optional<FlutterError> VideoPlayerTizenPlugin::initialize() {
   LOG_DEBUG("[VideoPlayerTizenPlugin] initialize");
 
   DisposeAllPlayers();
+
+  return FlutterError();
 }
 
-TextureMessage VideoPlayerTizenPlugin::create(const CreateMessage &createMsg) {
+ErrorOr<std::unique_ptr<TextureMessage>> VideoPlayerTizenPlugin::create(
+    const CreateMessage &createMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] asset: %s", createMsg.getAsset().c_str());
   LOG_DEBUG("[VideoPlayerTizenPlugin] uri: %s", createMsg.getUri().c_str());
   LOG_DEBUG("[VideoPlayerTizenPlugin] packageName: %s",
@@ -112,12 +124,13 @@ TextureMessage VideoPlayerTizenPlugin::create(const CreateMessage &createMsg) {
   int64_t texture_id = player->GetTextureId();
   players_[texture_id] = std::move(player);
 
-  TextureMessage result;
-  result.setTextureId(texture_id);
-  return result;
+  auto result = std::make_unique<TextureMessage>();
+  result->setTextureId(texture_id);
+  return ErrorOr<TextureMessage>::MakeWithUniquePtr(std::move(result));
 }
 
-void VideoPlayerTizenPlugin::dispose(const TextureMessage &textureMsg) {
+std::optional<FlutterError> VideoPlayerTizenPlugin::dispose(
+    const TextureMessage &textureMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
             textureMsg.getTextureId());
 
@@ -126,9 +139,12 @@ void VideoPlayerTizenPlugin::dispose(const TextureMessage &textureMsg) {
     iter->second->Dispose();
     players_.erase(iter);
   }
+
+  return FlutterError();
 }
 
-void VideoPlayerTizenPlugin::setLooping(const LoopingMessage &loopingMsg) {
+std::optional<FlutterError> VideoPlayerTizenPlugin::setLooping(
+    const LoopingMessage &loopingMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
             loopingMsg.getTextureId());
   LOG_DEBUG("[VideoPlayerTizenPlugin] isLooping: %d",
@@ -138,9 +154,12 @@ void VideoPlayerTizenPlugin::setLooping(const LoopingMessage &loopingMsg) {
   if (iter != players_.end()) {
     iter->second->SetLooping(loopingMsg.getIsLooping());
   }
+
+  return FlutterError();
 }
 
-void VideoPlayerTizenPlugin::setVolume(const VolumeMessage &volumeMsg) {
+std::optional<FlutterError> VideoPlayerTizenPlugin::setVolume(
+    const VolumeMessage &volumeMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
             volumeMsg.getTextureId());
   LOG_DEBUG("[VideoPlayerTizenPlugin] volume: %f", volumeMsg.getVolume());
@@ -149,9 +168,11 @@ void VideoPlayerTizenPlugin::setVolume(const VolumeMessage &volumeMsg) {
   if (iter != players_.end()) {
     iter->second->SetVolume(volumeMsg.getVolume());
   }
+
+  return FlutterError();
 }
 
-void VideoPlayerTizenPlugin::setPlaybackSpeed(
+std::optional<FlutterError> VideoPlayerTizenPlugin::setPlaybackSpeed(
     const PlaybackSpeedMessage &speedMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld", speedMsg.getTextureId());
   LOG_DEBUG("[VideoPlayerTizenPlugin] speed: %f", speedMsg.getSpeed());
@@ -160,9 +181,12 @@ void VideoPlayerTizenPlugin::setPlaybackSpeed(
   if (iter != players_.end()) {
     iter->second->SetPlaybackSpeed(speedMsg.getSpeed());
   }
+
+  return FlutterError();
 }
 
-void VideoPlayerTizenPlugin::play(const TextureMessage &textureMsg) {
+std::optional<FlutterError> VideoPlayerTizenPlugin::play(
+    const TextureMessage &textureMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
             textureMsg.getTextureId());
 
@@ -170,9 +194,12 @@ void VideoPlayerTizenPlugin::play(const TextureMessage &textureMsg) {
   if (iter != players_.end()) {
     iter->second->Play();
   }
+
+  return FlutterError();
 }
 
-void VideoPlayerTizenPlugin::pause(const TextureMessage &textureMsg) {
+std::optional<FlutterError> VideoPlayerTizenPlugin::pause(
+    const TextureMessage &textureMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
             textureMsg.getTextureId());
 
@@ -180,23 +207,25 @@ void VideoPlayerTizenPlugin::pause(const TextureMessage &textureMsg) {
   if (iter != players_.end()) {
     iter->second->Pause();
   }
+
+  return FlutterError();
 }
 
-PositionMessage VideoPlayerTizenPlugin::position(
+ErrorOr<std::unique_ptr<PositionMessage>> VideoPlayerTizenPlugin::position(
     const TextureMessage &textureMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
             textureMsg.getTextureId());
 
-  PositionMessage result;
+  auto result = std::make_unique<PositionMessage>();
   auto iter = players_.find(textureMsg.getTextureId());
   if (iter != players_.end()) {
-    result.setTextureId(textureMsg.getTextureId());
-    result.setPosition(iter->second->GetPosition());
+    result->setTextureId(textureMsg.getTextureId());
+    result->setPosition(iter->second->GetPosition());
   }
-  return result;
+  return ErrorOr<PositionMessage>::MakeWithUniquePtr(std::move(result));
 }
 
-void VideoPlayerTizenPlugin::seekTo(
+std::optional<FlutterError> VideoPlayerTizenPlugin::seekTo(
     const PositionMessage &positionMsg,
     const SeekCompletedCallback &onSeekCompleted) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] textureId: %ld",
@@ -208,14 +237,18 @@ void VideoPlayerTizenPlugin::seekTo(
   if (iter != players_.end()) {
     iter->second->SeekTo(positionMsg.getPosition(), onSeekCompleted);
   }
+
+  return FlutterError();
 }
 
-void VideoPlayerTizenPlugin::setMixWithOthers(
+std::optional<FlutterError> VideoPlayerTizenPlugin::setMixWithOthers(
     const MixWithOthersMessage &mixWithOthersMsg) {
   LOG_DEBUG("[VideoPlayerTizenPlugin] mixWithOthers: %d",
             mixWithOthersMsg.getMixWithOthers());
 
   options_.setMixWithOthers(mixWithOthersMsg.getMixWithOthers());
+
+  return FlutterError();
 }
 
 }  // namespace
