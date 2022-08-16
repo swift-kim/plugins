@@ -47,8 +47,9 @@ class BuildExamplesCommand extends PackageLoopingCommand {
           'build',
           'tpk',
           '--device-profile',
-          'wearable',
-          '-v',
+          'common',
+          '--target-arch',
+          'arm64',
         ],
         workingDir: example.directory,
       );

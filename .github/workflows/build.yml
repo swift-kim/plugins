@@ -55,6 +55,4 @@ jobs:
         if: ${{ env.HAS_CHANGED_PACKAGES == 'true' }}
         run: |
           export PATH=`pwd`/flutter-tizen/bin:$PATH
-          ./tools/tools_runner.sh build-examples \
-            --run-on-changed-packages \
-            --base-sha=$(git rev-parse HEAD^)
+          ./tools/tools_runner.sh build-examples
