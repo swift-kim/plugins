@@ -56,10 +56,11 @@ class AppContextStreamHandler : public FlStreamHandler {
 
     OnAppContextEvent callback = [this](std::string app_id,
                                         void *app_context_handle) {
+      int64_t handleAddress = reinterpret_cast<int64_t>(app_context_handle);
       flutter::EncodableMap map = {
           {flutter::EncodableValue("appId"), flutter::EncodableValue(app_id)},
           {flutter::EncodableValue("handle"),
-           flutter::EncodableValue(reinterpret_cast<int>(app_context_handle))},
+           flutter::EncodableValue(handleAddress)},
       };
       events_->Success(flutter::EncodableValue(map));
     };
