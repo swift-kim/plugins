@@ -2,7 +2,15 @@
 
 [![pub package](https://img.shields.io/pub/v/share_plus_tizen.svg)](https://pub.dev/packages/share_plus_tizen)
 
-The Tizen implementation of [`share_plus`](https://github.com/fluttercommunity/plus_plugins/tree/main/packages/share_plus).
+---
+
+## Deprecation Notice
+
+This plugin is no longer maintained by the [flutter-tizen](https://github.com/flutter-tizen) team and no further updates will be made. You might consider migrating to the [`tizen_app_control`](https://pub.dev/packages/tizen_app_control) plugin.
+
+---
+
+The Tizen implementation of [`share_plus`](https://pub.dev/packages/share_plus).
 
 ## Usage
 
@@ -11,7 +19,7 @@ To use this plugin, add `share_plus` and `share_plus_tizen` as [dependencies in 
 ```yaml
 dependencies:
   share_plus: ^3.0.5
-  share_plus_tizen: ^1.1.1
+  share_plus_tizen: ^1.1.2
 ```
 
 Then you can import `share_plus` in your Dart code.

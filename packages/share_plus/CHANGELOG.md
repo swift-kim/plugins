@@ -1,5 +1,6 @@
-## NEXT
+## 1.1.2
 
+* Add a deprecation notice.
 * Update tizen_app_control to 0.2.0.
 
 ## 1.1.1
