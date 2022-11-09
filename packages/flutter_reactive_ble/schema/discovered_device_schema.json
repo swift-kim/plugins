@@ -1,0 +1,43 @@
+{
+    "type": "object",
+    "properties": {
+        "device_id": {
+            "type": "string"
+        },
+        "device_name": {
+            "type": "string"
+        },
+        "service_data": {
+            "type": "object",
+            "patternProperties": {
+                ".*": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        "manufacturer_data": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            }
+        },
+        "rssi": {
+            "type": "integer"
+        },
+        "service_uuids": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "required": [
+        "device_id",
+        "service_data",
+        "rssi",
+        "service_uuids"
+    ]
+}

@@ -1,0 +1,34 @@
+{
+    "type": "object",
+    "properties": {
+        "qualified_characteristic": {
+            "$ref": "qualified_characteristic_schema.json/#"
+        },
+        "result": {
+            "type": "object",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "unit": {
+                            "type": "bool"
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "failure": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

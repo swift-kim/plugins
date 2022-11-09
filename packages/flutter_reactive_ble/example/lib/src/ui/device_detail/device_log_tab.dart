@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../ble/ble_logger.dart';
 
+/// A page that logs ble operations.
 class DeviceLogTab extends StatelessWidget {
   const DeviceLogTab({Key? key}) : super(key: key);
 

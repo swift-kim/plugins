@@ -23,3 +23,5 @@ flutter:
     platforms:
       tizen:
         dartPluginClass: ReactiveBleTizen
+        pluginClass: FlutterReactiveBleTizenPlugin
+        fileName: flutter_reactive_ble_tizen_plugin.h

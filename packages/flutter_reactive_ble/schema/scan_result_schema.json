@@ -1,0 +1,24 @@
+{
+    "type": "object",
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "discovered_device": {
+                    "$ref": "discovered_device_schema.json/#"
+                }
+            }
+        },
+        {
+            "type": "object",
+            "properties": {
+                "failure": {
+                    "type": "object",
+                    "properties": {
+                        "message": "string"
+                    }
+                }
+            }
+        }
+    ]
+}

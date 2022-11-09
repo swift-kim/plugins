@@ -8,9 +8,9 @@ import '../../ui/device_detail/device_log_tab.dart';
 import 'device_interaction_tab.dart';
 
 class DeviceDetailScreen extends StatelessWidget {
-  final DiscoveredDevice device;
+  const DeviceDetailScreen({required this.device, super.key});
 
-  const DeviceDetailScreen({required this.device, Key? key}) : super(key: key);
+  final DiscoveredDevice device;
 
   @override
   Widget build(BuildContext context) => Consumer<BleDeviceConnector>(
@@ -21,15 +21,18 @@ class DeviceDetailScreen extends StatelessWidget {
       );
 }
 
+/// A page that has two tab views:
+///   - DeviceInteractionTab: shows device's ble information.
+///   - DeviceLogTab: shows device's ble operations.
 class _DeviceDetail extends StatelessWidget {
   const _DeviceDetail({
     required this.device,
     required this.disconnect,
-    Key? key,
-  }) : super(key: key);
+  });
 
   final DiscoveredDevice device;
   final void Function(String deviceId) disconnect;
+  
   @override
   Widget build(BuildContext context) => WillPopScope(
         onWillPop: () async {

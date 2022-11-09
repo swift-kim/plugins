@@ -11,6 +11,7 @@ import 'characteristic_interaction_dialog.dart';
 part 'device_interaction_tab.g.dart';
 //ignore_for_file: annotate_overrides
 
+// Shows device list.
 class DeviceInteractionTab extends StatelessWidget {
   final DiscoveredDevice device;
 
@@ -64,10 +65,7 @@ class DeviceInteractionViewModel extends $DeviceInteractionViewModel {
 }
 
 class _DeviceInteractionTab extends StatefulWidget {
-  const _DeviceInteractionTab({
-    required this.viewModel,
-    Key? key,
-  }) : super(key: key);
+  const _DeviceInteractionTab({required this.viewModel});
 
   final DeviceInteractionViewModel viewModel;
 
@@ -76,16 +74,17 @@ class _DeviceInteractionTab extends StatefulWidget {
 }
 
 class _DeviceInteractionTabState extends State<_DeviceInteractionTab> {
-  late List<DiscoveredService> discoveredServices;
-
-  @override
-  void initState() {
-    discoveredServices = [];
-    super.initState();
-  }
+  late List<DiscoveredService> discoveredServices = [];
 
   Future<void> discoverServices() async {
     final result = await widget.viewModel.discoverServices();
+    for(final DiscoveredService service in result){
+      print('service id: ${service.serviceId}');
+      print('service included services: ${service.includedServices}');
+      print('characteristic ids: ${service.characteristicIds}');
+      print('discovered characteristics: ${service.characteristics}');
+      print("\n");
+    }
     setState(() {
       discoveredServices = result;
     });
@@ -154,8 +153,7 @@ class _ServiceDiscoveryList extends StatefulWidget {
   const _ServiceDiscoveryList({
     required this.deviceId,
     required this.discoveredServices,
-    Key? key,
-  }) : super(key: key);
+  });
 
   final String deviceId;
   final List<DiscoveredService> discoveredServices;
@@ -165,13 +163,7 @@ class _ServiceDiscoveryList extends StatefulWidget {
 }
 
 class _ServiceDiscoveryListState extends State<_ServiceDiscoveryList> {
-  late final List<int> _expandedItems;
-
-  @override
-  void initState() {
-    _expandedItems = [];
-    super.initState();
-  }
+  late final List<int> _expandedItems = [];
 
   String _charactisticsSummary(DiscoveredCharacteristic c) {
     final props = <String>[];
@@ -234,11 +226,11 @@ class _ServiceDiscoveryListState extends State<_ServiceDiscoveryList> {
                   ),
                   ListView.builder(
                     shrinkWrap: true,
+                    itemCount: service.characteristicIds.length,
                     itemBuilder: (context, index) => _characteristicTile(
                       service.characteristics[index],
                       widget.deviceId,
                     ),
-                    itemCount: service.characteristicIds.length,
                   ),
                 ],
               ),

@@ -9,8 +9,9 @@ import '../../ble/ble_device_interactor.dart';
 class CharacteristicInteractionDialog extends StatelessWidget {
   const CharacteristicInteractionDialog({
     required this.characteristic,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
+
   final QualifiedCharacteristic characteristic;
 
   @override
@@ -32,8 +33,7 @@ class _CharacteristicInteractionDialog extends StatefulWidget {
     required this.writeWithResponse,
     required this.writeWithoutResponse,
     required this.subscribeToCharacteristic,
-    Key? key,
-  }) : super(key: key);
+  });
 
   final QualifiedCharacteristic characteristic;
   final Future<List<int>> Function(QualifiedCharacteristic characteristic)
@@ -60,7 +60,7 @@ class _CharacteristicInteractionDialogState
   late String writeOutput;
   late String subscribeOutput;
   late TextEditingController textEditingController;
-  late StreamSubscription<List<int>>? subscribeStream;
+  StreamSubscription<List<int>>? subscribeStream;
 
   @override
   void initState() {

@@ -9,7 +9,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_reactive_ble:
-    path: third_party/flutter_reactive_ble/packages/flutter_reactive_ble
+    path: flutter_reactive_ble/packages/flutter_reactive_ble
   flutter_reactive_ble_tizen:
     path: ../
   intl: ^0.17.0
