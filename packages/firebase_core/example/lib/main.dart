@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   String get name => 'foo';
 
@@ -24,39 +24,34 @@ class MyApp extends StatelessWidget {
       );
 
   Future<void> initializeDefault() async {
-    final FirebaseApp app =
-        await Firebase.initializeApp(options: firebaseOptions);
+    final app = await Firebase.initializeApp(options: firebaseOptions);
     log('Initialized default app $app');
-    print('Initialized default app $app');
   }
 
   Future<void> initializeSecondary() async {
-    final FirebaseApp app = await Firebase.initializeApp(
+    final app = await Firebase.initializeApp(
       name: name,
       options: firebaseOptions,
     );
 
     log('Initialized $app');
-    print('Initialized $app');
   }
 
   void apps() {
-    log('Currently initialized apps: ${Firebase.apps}');
-    print('Currently initialized apps: ${Firebase.apps}');
+    final apps = Firebase.apps;
+    log('Currently initialized apps: $apps');
   }
 
   void options() {
-    final FirebaseApp app = Firebase.app(name);
-    final FirebaseOptions options = app.options;
+    final app = Firebase.app(name);
+    final options = app.options;
     log('Current options for app $name: $options');
-    print('Current options for app $name: $options');
   }
 
   Future<void> delete() async {
-    final FirebaseApp app = Firebase.app(name);
+    final app = Firebase.app(name);
     await app.delete();
     log('App $name deleted');
-    print('App $name deleted');
   }
 
   @override
