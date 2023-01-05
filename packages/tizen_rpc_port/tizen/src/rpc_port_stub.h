@@ -5,10 +5,9 @@
 #ifndef FLUTTER_PLUGIN_RPC_PORT_STUB_H_
 #define FLUTTER_PLUGIN_RPC_PORT_STUB_H_
 
-#include <flutter/encodable_value.h>
-#include <flutter/event_sink.h>
 #include <rpc-port.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -16,13 +15,29 @@
 
 namespace tizen {
 
-typedef flutter::EventSink<flutter::EncodableValue> FlEventSink;
+using OnStubConnectEvent =
+    std::function<void(std::string sender, std::string instance)>;
+using OnStubReceiveEvent = std::function<void(
+    std::string sender, std::string instance, rpc_port_h port)>;
 
-class RpcPortStubManager {
+class RpcPortStub {
  public:
-  static void Init(std::unique_ptr<FlEventSink> event_sink);
+  explicit RpcPortStub(const std::string& port_name);
+  ~RpcPortStub();
 
-  static RpcPortResult Listen(rpc_port_stub_h handle);
+  bool Listen();
+
+  void SetConnectHandler(OnStubConnectEvent on_connect) {
+    connect_callback_ = on_connect;
+  }
+
+  void SetDisconnectHandler(OnStubConnectEvent on_disconnect) {
+    disconnect_callback_ = on_disconnect;
+  }
+
+  void SetReceiveHandler(OnStubReceiveEvent on_receive) {
+    receive_callback_ = on_receive;
+  }
 
  private:
   static void OnConnectedEvent(const char* sender, const char* instance,
@@ -32,7 +47,11 @@ class RpcPortStubManager {
   static int OnReceivedEvent(const char* sender, const char* instance,
                              rpc_port_h port, void* user_data);
 
-  static std::unique_ptr<FlEventSink> event_sink_;
+  rpc_port_stub_h handle_ = nullptr;
+
+  OnStubConnectEvent connect_callback_;
+  OnStubConnectEvent disconnect_callback_;
+  OnStubReceiveEvent receive_callback_;
 };
 
 }  // namespace tizen

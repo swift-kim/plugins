@@ -19,23 +19,10 @@ export 'package:meta/meta.dart' show nonVirtual, visibleForOverriding;
 abstract class StubBase {
   /// Creates a [StubBase] instance with the specified port name.
   StubBase(this.portName) {
-    _handle = using((Arena arena) {
-      final Pointer<rpc_port_stub_h> pStub = arena();
-      final Pointer<Char> pPortName = portName.toNativeChar(allocator: arena);
-      final int ret = tizen.rpc_port_stub_create(pStub, pPortName);
-      if (ret != 0) {
-        throw PlatformException(
-          code: ret.toString(),
-          message: tizen.get_error_message(ret).toDartString(),
-        );
-      }
-      return pStub.value;
-    });
-
     _finalizer.attach(this, this);
   }
 
-  late final rpc_port_stub_h _handle;
+  rpc_port_stub_h _handle = nullptr;
 
   final Finalizer<StubBase> _finalizer = Finalizer<StubBase>((StubBase stub) {
     stub.close();
@@ -82,13 +69,25 @@ abstract class StubBase {
       throw StateError('Cannot listen again');
     }
 
+    _handle = using((Arena arena) {
+      final Pointer<rpc_port_stub_h> pStub = arena();
+      final Pointer<Char> pPortName = portName.toNativeChar(allocator: arena);
+      final int ret = tizen.rpc_port_stub_create(pStub, pPortName);
+      if (ret != 0) {
+        throw PlatformException(
+          code: ret.toString(),
+          message: tizen.get_error_message(ret).toDartString(),
+        );
+      }
+      return pStub.value;
+    });
+
     final Stream<dynamic> stream = _eventChannel
         .receiveBroadcastStream(<String, Object>{'handle': _handle.address});
     _streamSubscription = stream.listen((dynamic map) async {
       final int handle = map['handle'] as int;
-      if (handle != _handle.address) {
-        return;
-      }
+      _handle = rpc_port_stub_h.fromAddress(handle);
+
       final String event = map['event'] as String;
       final String sender = map['sender'] as String;
       final String instance = map['instance'] as String;
@@ -125,11 +124,12 @@ abstract class StubBase {
 
   /// Shuts down this stub.
   ///
-  /// All active connections will be closed immediately. No operation can be
-  /// made to this stub after this call.
+  /// All active connections will be closed immediately.
   Future<void> close() async {
     _streamSubscription?.cancel();
+    _streamSubscription = null;
     tizen.rpc_port_stub_destroy(_handle);
+    _handle = nullptr;
   }
 
   /// Called when a connection is established by a client.

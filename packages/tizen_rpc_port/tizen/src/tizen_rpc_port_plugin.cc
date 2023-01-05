@@ -11,6 +11,7 @@
 #include <flutter/plugin_registrar.h>
 #include <flutter/standard_method_codec.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <variant>
@@ -97,21 +98,18 @@ class RpcStubStreamHandler : public FlStreamHandler {
   std::unique_ptr<FlStreamHandlerError> OnListenInternal(
       const flutter::EncodableValue* arguments,
       std::unique_ptr<FlEventSink>&& events) override {
-    RpcPortStubManager::Init(std::move(events));
-
     const auto* args = std::get_if<flutter::EncodableMap>(arguments);
     if (!args) {
       return std::make_unique<RpcStreamHandlerError>(
           "Invalid arguments", "The argument must be a map.");
     }
-    rpc_port_stub_h handle = nullptr;
-    if (!GetValueFromEncodableMap(args, "handle",
-                                  reinterpret_cast<int64_t&>(handle))) {
+    std::string port_name;
+    if (!GetValueFromEncodableMap(args, "portName", port_name)) {
       return std::make_unique<RpcStreamHandlerError>("Invalid arguments",
-                                                     "No handle provided.");
+                                                     "No portName provided.");
     }
 
-    auto ret = RpcPortStubManager::Listen(handle);
+    auto ret = RpcPortStub::Listen(&handle_, port_name);
     if (!ret) {
       return std::make_unique<RpcStreamHandlerError>(
           std::to_string(ret.error_code), ret.message());
@@ -123,6 +121,9 @@ class RpcStubStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue* arguments) override {
     return nullptr;
   }
+
+ private:
+  rpc_port_stub_h handle_ = nullptr;
 };
 
 class TizenRpcPortPlugin : public flutter::Plugin {
