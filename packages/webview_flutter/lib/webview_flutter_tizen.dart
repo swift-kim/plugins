@@ -14,6 +14,8 @@ import 'package:flutter_tizen/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
+import 'src/tizen_webview_controller.dart';
+
 /// Builds a Tizen webview.
 ///
 /// This is used as the default implementation for [WebView.platform] on Tizen. It uses a method channel to
@@ -44,7 +46,7 @@ class TizenWebView implements WebViewPlatform {
           if (onWebViewPlatformCreated == null) {
             return;
           }
-          onWebViewPlatformCreated(MethodChannelWebViewPlatform(
+          onWebViewPlatformCreated(TizenWebViewController(
             id,
             webViewPlatformCallbacksHandler,
             javascriptChannelRegistry,
@@ -53,7 +55,7 @@ class TizenWebView implements WebViewPlatform {
         gestureRecognizers: gestureRecognizers,
         layoutDirection: Directionality.maybeOf(context) ?? TextDirection.rtl,
         creationParams:
-            MethodChannelWebViewPlatform.creationParamsToMap(creationParams),
+            TizenWebViewController.creationParamsToMap(creationParams),
         creationParamsCodec: const StandardMessageCodec(),
       ),
     );
@@ -72,7 +74,7 @@ class TizenWebView implements WebViewPlatform {
 /// Handles all cookie operations for the current platform.
 class WebViewTizenCookieManager extends WebViewCookieManagerPlatform {
   @override
-  Future<bool> clearCookies() => MethodChannelWebViewPlatform.clearCookies();
+  Future<bool> clearCookies() => TizenWebViewController.clearCookies();
 
   @override
   Future<void> setCookie(WebViewCookie cookie) async {
@@ -80,7 +82,7 @@ class WebViewTizenCookieManager extends WebViewCookieManagerPlatform {
       throw ArgumentError(
           'The path property for the provided cookie was not given a legal value.');
     }
-    return MethodChannelWebViewPlatform.setCookie(cookie);
+    return TizenWebViewController.setCookie(cookie);
   }
 
   bool _isValidPath(String path) {
