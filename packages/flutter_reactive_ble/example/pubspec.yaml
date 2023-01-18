@@ -1,4 +1,4 @@
-name: flutter_reactive_ble_tizen_example
+name: flutter_reactive_ble_example
 description: Demonstrates how to use the flutter_reactive_ble_tizen plugin.
 publish_to: none
 
@@ -8,8 +8,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_reactive_ble:
-    path: flutter_reactive_ble/packages/flutter_reactive_ble
+  flutter_reactive_ble: ^5.0.3
   flutter_reactive_ble_tizen:
     path: ../
   intl: ^0.17.0

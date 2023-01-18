@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:flutter_reactive_ble_example/src/ble/ble_device_connector.dart';
+import 'package:flutter_reactive_ble_example/src/ble/ble_device_interactor.dart';
+import 'package:flutter_reactive_ble_example/src/ble/ble_scanner.dart';
+import 'package:flutter_reactive_ble_example/src/ble/ble_status_monitor.dart';
+import 'package:flutter_reactive_ble_example/src/ui/ble_status_screen.dart';
+import 'package:flutter_reactive_ble_example/src/ui/device_list.dart';
 import 'package:provider/provider.dart';
 
-import 'src/ble/ble_device_connector.dart';
-import 'src/ble/ble_device_interactor.dart';
 import 'src/ble/ble_logger.dart';
-import 'src/ble/ble_scanner.dart';
-import 'src/ble/ble_status_monitor.dart';
-import 'src/ui/ble_status_screen.dart';
-import 'src/ui/device_list.dart';
 
 const _themeColor = Colors.lightGreen;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final _bleLogger = BleLogger();
   final _ble = FlutterReactiveBle();
+  final _bleLogger = BleLogger(ble: _ble);
   final _scanner = BleScanner(ble: _ble, logMessage: _bleLogger.addToLog);
   final _monitor = BleStatusMonitor(_ble);
   final _connector = BleDeviceConnector(
@@ -70,7 +70,9 @@ void main() {
 }
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    Key? key,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) => Consumer<BleStatus?>(

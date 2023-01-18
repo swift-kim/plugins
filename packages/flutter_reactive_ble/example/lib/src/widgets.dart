@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class BluetoothIcon extends StatelessWidget {
-  const BluetoothIcon({super.key});
+  const BluetoothIcon({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) => const SizedBox(
@@ -14,8 +14,8 @@ class BluetoothIcon extends StatelessWidget {
 class StatusMessage extends StatelessWidget {
   const StatusMessage({
     required this.text,
-    super.key,
-  });
+    Key? key,
+  }) : super(key: key);
 
   final String text;
 

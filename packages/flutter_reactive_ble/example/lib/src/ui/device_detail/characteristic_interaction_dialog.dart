@@ -2,16 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:flutter_reactive_ble_example/src/ble/ble_device_interactor.dart';
 import 'package:provider/provider.dart';
-
-import '../../ble/ble_device_interactor.dart';
 
 class CharacteristicInteractionDialog extends StatelessWidget {
   const CharacteristicInteractionDialog({
     required this.characteristic,
-    super.key,
-  });
-
+    Key? key,
+  }) : super(key: key);
   final QualifiedCharacteristic characteristic;
 
   @override
@@ -33,7 +31,8 @@ class _CharacteristicInteractionDialog extends StatefulWidget {
     required this.writeWithResponse,
     required this.writeWithoutResponse,
     required this.subscribeToCharacteristic,
-  });
+    Key? key,
+  }) : super(key: key);
 
   final QualifiedCharacteristic characteristic;
   final Future<List<int>> Function(QualifiedCharacteristic characteristic)
@@ -60,7 +59,7 @@ class _CharacteristicInteractionDialogState
   late String writeOutput;
   late String subscribeOutput;
   late TextEditingController textEditingController;
-  StreamSubscription<List<int>>? subscribeStream;
+  late StreamSubscription<List<int>>? subscribeStream;
 
   @override
   void initState() {
