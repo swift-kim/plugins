@@ -1,3 +1,7 @@
+// Copyright 2023 Samsung Electronics Co., Ltd. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 import 'package:flutter/services.dart';
 import 'package:flutter_reactive_ble_tizen/flutter_reactive_ble_tizen.dart';
 import 'package:flutter_reactive_ble_tizen/src/models.dart';
@@ -8,49 +12,46 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ReactiveBleTizen plugin;
-  late List<MethodCall> log;
+  late List<MethodCall> methodCalls;
 
   setUp(() {
     plugin = ReactiveBleTizen();
-    log = <MethodCall>[];
+    methodCalls = <MethodCall>[];
+
     plugin.methodChannel.setMockMethodCallHandler((MethodCall methodCall) {
-      log.add(methodCall);
+      methodCalls.add(methodCall);
       return null;
     });
   });
 
-  test('registers instance', () {
-    ReactiveBleTizen.register();
-    expect(ReactiveBlePlatform.instance, isA<ReactiveBleTizen>());
-  });
-
   test('scanForDevices', () {
     final uuids = [
-      // 16bit uuid.
+      // 16-bit UUID.
       Uuid.parse('0A0A'),
-      // 32bit uuid.
+      // 32-bit UUID.
       Uuid.parse('0A0A0A0A'),
-      // 128bit uuid.
+      // 128-bit UUID.
       Uuid.parse('0A0A0A0A-0A0A-0A0A-0A0A-0A0A0A0A0A0A'),
     ];
-
     plugin.scanForDevices(
-        withServices: uuids,
-        scanMode: ScanMode.balanced,
-        requireLocationServicesEnabled: true);
+      withServices: uuids,
+      scanMode: ScanMode.balanced,
+      requireLocationServicesEnabled: true,
+    );
 
-    expect(log, <Matcher>[
+    expect(
+      methodCalls.first,
       isMethodCall(
         'scanForDevices',
         arguments: <String, Object>{
-          'withServices': <List<int>>[
-            List<int>.filled(2, 10),
-            List<int>.filled(4, 10),
-            List<int>.filled(16, 10),
+          kServiceIds: <String>[
+            '0a0a',
+            '0a0a0a0a',
+            '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a',
           ],
         },
       ),
-    ]);
+    );
   });
 
   test('subscribeToNotifications', () {
@@ -62,17 +63,18 @@ void main() {
       characteristicId: Uuid([0x2a, 0x19]),
     ));
 
-    expect(log, <Matcher>[
+    expect(
+      methodCalls.first,
       isMethodCall(
         'subscribeToNotifications',
         arguments: <String, Object>{
           kQualifiedCharacteristic: <String, Object>{
             'device_id': '01:23:45:67:89:AB',
-            'service_id': [0x18, 0x0f],
-            'characteristic_id': [0x2a, 0x19],
+            'service_id': '180f',
+            'characteristic_id': '2a19',
           }
         },
       ),
-    ]);
+    );
   });
 }

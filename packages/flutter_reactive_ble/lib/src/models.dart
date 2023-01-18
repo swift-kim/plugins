@@ -1,3 +1,7 @@
+// Copyright 2023 Samsung Electronics Co., Ltd. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 import 'package:flutter/services.dart';
 import 'package:reactive_ble_platform_interface/reactive_ble_platform_interface.dart';
 
@@ -32,27 +36,26 @@ extension CharacteristicValueExtension on CharacteristicValue {
     final qualifiedCharacteristicMap =
         (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
     final resultMap = map[kResult] as Map;
-    final value = (resultMap[kValue] as List?)?.cast<int>();
+    final valueList = (resultMap[kValue] as List?)?.cast<int>();
     final failureMap = resultMap[kFailure] as Map?;
 
-    if (value != null) {
+    if (valueList != null) {
       return CharacteristicValue(
         characteristic: QualifiedCharacteristicExtension.fromMap(
             qualifiedCharacteristicMap),
-        result: Result.success(value),
+        result: Result.success(valueList),
       );
     } else if (failureMap != null) {
       return CharacteristicValue(
         characteristic: QualifiedCharacteristicExtension.fromMap(
             qualifiedCharacteristicMap),
-        result: Result.failure(
-          GenericFailure(
-              code: CharacteristicValueUpdateError.unknown,
-              message: failureMap[kMessage] as String),
-        ),
+        result: Result.failure(GenericFailure(
+          code: CharacteristicValueUpdateError.unknown,
+          message: failureMap[kMessage] as String,
+        )),
       );
     }
-    throw Exception();
+    throw ArgumentError();
   }
 }
 
@@ -67,7 +70,7 @@ extension ConnectionStateUpdateExtension on ConnectionStateUpdate {
 }
 
 extension DiscoveredCharacteristicExtension on DiscoveredCharacteristic {
-  static DiscoveredCharacteristic fromMap(Map<Object?, Object?> map) =>
+  static DiscoveredCharacteristic fromMap(Map<String, Object?> map) =>
       DiscoveredCharacteristic(
         characteristicId: Uuid.parse(map[kCharacteristicId] as String),
         serviceId: Uuid.parse(map[kServiceId] as String),
@@ -81,43 +84,43 @@ extension DiscoveredCharacteristicExtension on DiscoveredCharacteristic {
 
 extension DiscoveredDeviceExtension on DiscoveredDevice {
   static DiscoveredDevice fromMap(Map<String, Object> map) {
-    final id = map[kDeviceId] as String;
-    final name = map[kDeviceName] as String? ?? '';
     final serviceData = (map[kServiceData] as Map)
         .cast<String, Uint8List>()
         .map((String key, Uint8List value) => MapEntry(Uuid.parse(key), value));
-    final manufacturerData = map[kManufacturerData] as Uint8List;
-    final rssi = map[kRssi] as int;
     final serviceUuids =
         (map[kServiceIds] as List).cast<String>().map(Uuid.parse).toList();
     return DiscoveredDevice(
-      id: id,
-      name: name,
+      id: map[kDeviceId] as String,
+      name: map[kDeviceName] as String? ?? '',
       serviceData: serviceData,
-      manufacturerData: manufacturerData,
-      rssi: rssi,
+      manufacturerData: map[kManufacturerData] as Uint8List,
+      rssi: map[kRssi] as int,
       serviceUuids: serviceUuids,
     );
   }
 }
 
 extension DiscoveredServiceExtension on DiscoveredService {
-  static DiscoveredService fromMap(Map<Object?, Object?> map) =>
-      DiscoveredService(
-        serviceId: Uuid.parse(map[kServiceId] as String),
-        characteristicIds: (map[kCharacteristicIds] as List)
-            .cast<String>()
-            .map(Uuid.parse)
-            .toList(),
-        includedServices: (map[kIncludedServices] as List)
-            .cast<Map<Object?, Object?>>()
-            .map(DiscoveredServiceExtension.fromMap)
-            .toList(),
-        characteristics: (map[kCharacteristics] as List)
-            .cast<Map<Object?, Object?>>()
-            .map(DiscoveredCharacteristicExtension.fromMap)
-            .toList(),
-      );
+  static DiscoveredService fromMap(Map<String, Object?> map) {
+    final includedServices = (map[kIncludedServices] as List)
+        .cast<Map<String, Object?>>()
+        .map(DiscoveredServiceExtension.fromMap)
+        .toList();
+    final characteristics = (map[kCharacteristics] as List)
+        .cast<Map<String, Object?>>()
+        .map(DiscoveredCharacteristicExtension.fromMap)
+        .toList();
+    final characteristicIds = (map[kCharacteristicIds] as List)
+        .cast<String>()
+        .map(Uuid.parse)
+        .toList();
+    return DiscoveredService(
+      serviceId: Uuid.parse(map[kServiceId] as String),
+      characteristicIds: characteristicIds,
+      includedServices: includedServices,
+      characteristics: characteristics,
+    );
+  }
 }
 
 extension QualifiedCharacteristicExtension on QualifiedCharacteristic {
@@ -137,23 +140,24 @@ extension QualifiedCharacteristicExtension on QualifiedCharacteristic {
 
 extension ScanResultExtension on ScanResult {
   static ScanResult fromMap(Map<String, Object> map) {
-    final discoveredDeviceMap = map[kDiscoveredDevice] as Map?;
+    final discoveredDeviceMap =
+        (map[kDiscoveredDevice] as Map?)?.cast<String, Object>();
     final failureMap = map[kFailure] as Map?;
 
     if (discoveredDeviceMap != null) {
       return ScanResult(
-          result: Result.success(DiscoveredDeviceExtension.fromMap(
-              discoveredDeviceMap.cast<String, Object>())));
+        result: Result.success(
+            DiscoveredDeviceExtension.fromMap(discoveredDeviceMap)),
+      );
     } else if (failureMap != null) {
       return ScanResult(
-        result: Result.failure(
-          GenericFailure(
-              code: ScanFailure.unknown,
-              message: failureMap[kMessage] as String),
-        ),
+        result: Result.failure(GenericFailure(
+          code: ScanFailure.unknown,
+          message: failureMap[kMessage] as String,
+        )),
       );
     }
-    throw Exception();
+    throw ArgumentError();
   }
 }
 
@@ -175,11 +179,10 @@ extension WriteCharacteristicInfoExtension on WriteCharacteristicInfo {
       return WriteCharacteristicInfo(
         characteristic: QualifiedCharacteristicExtension.fromMap(
             qualifiedCharacteristicMap),
-        result: Result.failure(
-          GenericFailure(
-              code: WriteCharacteristicFailure.unknown,
-              message: failureMap[kMessage] as String),
-        ),
+        result: Result.failure(GenericFailure(
+          code: WriteCharacteristicFailure.unknown,
+          message: failureMap[kMessage] as String,
+        )),
       );
     }
     throw Exception();
