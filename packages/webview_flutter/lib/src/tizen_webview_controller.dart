@@ -7,16 +7,15 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
-/// A [WebViewPlatformController] that uses a method channel to control the webview.
-class TizenWebViewController implements WebViewPlatformController {
+/// A [PlatformWebViewController] that uses a method channel to control the webview.
+class TizenWebViewController extends PlatformWebViewController {
   /// Constructs an instance that will listen for webviews broadcasting to the
   /// given [id], using the given [WebViewPlatformCallbacksHandler].
+  /// Creates a new [TizenWebViewController].
   TizenWebViewController(
-    int id,
-    this._platformCallbacksHandler,
-    this._javascriptChannelRegistry,
-  )   : assert(_platformCallbacksHandler != null),
-        _channel = MethodChannel('plugins.flutter.io/webview_$id') {
+    PlatformWebViewControllerCreationParams params,
+  ) : super.implementation(params) {
+    // TODO: params
     _channel.setMethodCallHandler(_onMethodCall);
   }
 
@@ -24,10 +23,11 @@ class TizenWebViewController implements WebViewPlatformController {
 
   final WebViewPlatformCallbacksHandler _platformCallbacksHandler;
 
-  final MethodChannel _channel;
+  // TODO
+  static int _instanceId = 0;
 
-  static const MethodChannel _cookieManagerChannel =
-      MethodChannel('plugins.flutter.io/cookie_manager');
+  final MethodChannel _channel =
+      MethodChannel('plugins.flutter.io/webview_${_instanceId++}');
 
   Future<bool?> _onMethodCall(MethodCall call) async {
     switch (call.method) {
@@ -229,19 +229,6 @@ class TizenWebViewController implements WebViewPlatformController {
   @override
   Future<int> getScrollY() =>
       _channel.invokeMethod<int>('getScrollY').then((int? result) => result!);
-
-  /// Method channel implementation for [WebViewPlatform.clearCookies].
-  static Future<bool> clearCookies() {
-    return _cookieManagerChannel
-        .invokeMethod<bool>('clearCookies')
-        .then<bool>((dynamic result) => result! as bool);
-  }
-
-  /// Method channel implementation for [WebViewPlatform.setCookie].
-  static Future<void> setCookie(WebViewCookie cookie) {
-    return _cookieManagerChannel.invokeMethod<void>(
-        'setCookie', cookie.toJson());
-  }
 
   static Map<String, dynamic> _webSettingsToMap(WebSettings? settings) {
     final Map<String, dynamic> map = <String, dynamic>{};
