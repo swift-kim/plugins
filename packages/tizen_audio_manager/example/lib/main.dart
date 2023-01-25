@@ -107,20 +107,23 @@ class _VolumeControlScreenState extends State<VolumeControlScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Volume control')),
+      appBar: AppBar(title: const Text('Audio Manager Demo')),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           Text('Current playback type: ${_currentPlaybackType.name}'),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
-            const Text('Audio type:'),
-            const SizedBox(width: 10),
-            DropdownButton<AudioVolumeType>(
-              value: _selectedType,
-              items: _dropdownButtonItems,
-              onChanged: _onAudioTypeChanged,
-            )
-          ]),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Text('Audio type:'),
+              const SizedBox(width: 10),
+              DropdownButton<AudioVolumeType>(
+                value: _selectedType,
+                items: _dropdownButtonItems,
+                onChanged: _onAudioTypeChanged,
+              )
+            ],
+          ),
           Text('Volume: $_currentVolume/$_maxVolume'),
           SizedBox(
             width: 250,

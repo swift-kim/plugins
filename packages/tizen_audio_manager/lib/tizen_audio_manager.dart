@@ -33,7 +33,7 @@ enum AudioVolumeType {
   voice,
 
   /// No volume.
-  none
+  none,
 }
 
 AudioVolumeType _stringToAudioVolumeType(String s) {
@@ -64,11 +64,6 @@ AudioVolumeType _stringToAudioVolumeType(String s) {
 class AudioManager {
   AudioManager._();
 
-  static const MethodChannel _channel = MethodChannel('tizen/audio_manager');
-
-  static const EventChannel _eventChannel =
-      EventChannel('tizen/audio_manager_events');
-
   /// Gets the volume controller.
   static final AudioVolume volumeController = AudioVolume();
 }
@@ -77,23 +72,28 @@ class AudioManager {
 class AudioVolume {
   /// Provides the ability to control and monitor the volume levels.
   factory AudioVolume() {
-    return _audioVolume;
+    return _instance;
   }
 
-  AudioVolume._internal();
+  AudioVolume._();
 
-  static final AudioVolume _audioVolume = AudioVolume._internal();
+  static final AudioVolume _instance = AudioVolume._();
+
+  static const MethodChannel _channel = MethodChannel('tizen/audio_manager');
+
+  static const EventChannel _eventChannel =
+      EventChannel('tizen/audio_manager_events');
 
   /// Gets the volume type of the sound being currently played.
   Future<AudioVolumeType> get currentPlaybackType async {
-    final String? type = await AudioManager._channel
-        .invokeMethod<String>('getCurrentPlaybackType');
+    final String? type =
+        await _channel.invokeMethod<String>('getCurrentPlaybackType');
     return _stringToAudioVolumeType(type!);
   }
 
   /// Gets the current volume level for [type].
   Future<int> getLevel(AudioVolumeType type) async {
-    final int? level = await AudioManager._channel.invokeMethod<int>(
+    final int? level = await _channel.invokeMethod<int>(
       'getLevel',
       <String, String>{'type': type.name},
     );
@@ -102,7 +102,7 @@ class AudioVolume {
 
   /// Sets the volume level for [type].
   Future<void> setLevel(AudioVolumeType type, int level) async {
-    await AudioManager._channel.invokeMethod<void>(
+    await _channel.invokeMethod<void>(
       'setLevel',
       <String, dynamic>{'type': type.name, 'volume': level},
     );
@@ -110,7 +110,7 @@ class AudioVolume {
 
   /// Gets the maximum volume level for [type].
   Future<int> getMaxLevel(AudioVolumeType type) async {
-    final int? level = await AudioManager._channel.invokeMethod<int>(
+    final int? level = await _channel.invokeMethod<int>(
       'getMaxLevel',
       <String, String>{'type': type.name},
     );
@@ -118,7 +118,7 @@ class AudioVolume {
   }
 
   /// A stream of events occurring when the volume level is changed.
-  Stream<VolumeChangedEvent> onChanged = AudioManager._eventChannel
+  Stream<VolumeChangedEvent> onChanged = _eventChannel
       .receiveBroadcastStream()
       .map((dynamic msg) => VolumeChangedEvent.fromMap(
           (msg as Map<Object?, Object?>).cast<String, dynamic>()));
