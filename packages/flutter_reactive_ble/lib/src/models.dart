@@ -5,7 +5,6 @@
 import 'package:flutter/services.dart';
 import 'package:reactive_ble_platform_interface/reactive_ble_platform_interface.dart';
 
-const String kBleStatus = 'ble_status';
 const String kCharacteristicId = 'characteristic_id';
 const String kCharacteristicIds = 'characteristic_ids';
 const String kCharacteristics = 'characteristics';
@@ -28,7 +27,6 @@ const String kRssi = 'rssi';
 const String kServiceData = 'service_data';
 const String kServiceId = 'service_id';
 const String kServiceIds = 'service_ids';
-const String kServices = "services";
 const String kValue = 'value';
 
 extension CharacteristicValueExtension on CharacteristicValue {

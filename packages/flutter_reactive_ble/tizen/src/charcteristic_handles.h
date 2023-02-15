@@ -14,11 +14,11 @@
 typedef std::string uuid;
 
 // A value type class that locates characteristic.
-class CharacteristicAddress {
+class QualifiedCharacteristic {
  public:
-  CharacteristicAddress(const std::string &device_address,
-                        const uuid &service_uuid,
-                        const uuid &characteristic_uuid)
+  QualifiedCharacteristic(const std::string &device_address,
+                          const uuid &service_uuid,
+                          const uuid &characteristic_uuid)
       : device_address_(device_address),
         service_uuid_(service_uuid),
         characteristic_uuid_(characteristic_uuid) {}
@@ -29,7 +29,7 @@ class CharacteristicAddress {
 
   uuid characteristic_uuid() const { return characteristic_uuid_; }
 
-  bool operator==(const CharacteristicAddress &other) const {
+  bool operator==(const QualifiedCharacteristic &other) const {
     return (device_address_ == other.device_address_ &&
             service_uuid_ == other.service_uuid_ &&
             characteristic_uuid_ == other.characteristic_uuid_);
@@ -41,33 +41,40 @@ class CharacteristicAddress {
   uuid characteristic_uuid_;
 };
 
-struct CharacteristicAddressHasher {
-  std::size_t operator()(const CharacteristicAddress &address) const {
-    return ((std::hash<std::string>()(address.device_address()) ^
-             (std::hash<std::string>()(address.service_uuid()) << 1)) >>
+struct CharacteristicHasher {
+  std::size_t operator()(const QualifiedCharacteristic &characteristic) const {
+    return ((std::hash<std::string>()(characteristic.device_address()) ^
+             (std::hash<std::string>()(characteristic.service_uuid()) << 1)) >>
             1) ^
-           (std::hash<std::string>()(address.characteristic_uuid()) << 1);
+           (std::hash<std::string>()(characteristic.characteristic_uuid())
+            << 1);
   }
 };
 
-typedef std::function<void(CharacteristicAddress address, std::vector<uint8_t>)>
+typedef std::function<void(QualifiedCharacteristic characteristic,
+                           std::vector<uint8_t>)>
     CharacteristicValueChangedCallback;
-typedef std::function<void(CharacteristicAddress address, std::vector<uint8_t>)>
+typedef std::function<void(QualifiedCharacteristic characteristic,
+                           std::vector<uint8_t>)>
     CharacteristicValueReadCallback;
-typedef std::function<void(CharacteristicAddress address)>
+typedef std::function<void(QualifiedCharacteristic characteristic)>
     CharacteristicValueWriteCallback;
 
 /// A wrapper class that holds native ble device and GATT handles.
 class NativeCharacteristicHandle {
  public:
-  /// Creates a NativeCharacteristicHandle instance from CharacteristicAddress.
-  explicit NativeCharacteristicHandle(const CharacteristicAddress &address) {
-    bt_gatt_client_create(address.device_address().c_str(), &device_handle_);
-    bt_gatt_client_get_service(device_handle_, address.service_uuid().c_str(),
+  /// Creates a NativeCharacteristicHandle instance from
+  /// QualifiedCharacteristic.
+  explicit NativeCharacteristicHandle(
+      const QualifiedCharacteristic &characteristic) {
+    bt_gatt_client_create(characteristic.device_address().c_str(),
+                          &device_handle_);
+    bt_gatt_client_get_service(device_handle_,
+                               characteristic.service_uuid().c_str(),
                                &service_handle_);
-    bt_gatt_service_get_characteristic(service_handle_,
-                                       address.characteristic_uuid().c_str(),
-                                       &characteristic_handle_);
+    bt_gatt_service_get_characteristic(
+        service_handle_, characteristic.characteristic_uuid().c_str(),
+        &characteristic_handle_);
   }
 
   // Delete copy operations.
@@ -96,10 +103,10 @@ class NativeCharacteristicHandle {
     }
   }
 
-  /// Returns a CharacteristicAddress from the current native handle.
-  CharacteristicAddress ToCharacteristicAddress() const {
-    return CharacteristicAddress(device_id(), service_uuid(),
-                                 characteristic_uuid());
+  /// Returns a QualifiedCharacteristic from the current native handle.
+  QualifiedCharacteristic ToQualifiedCharacteristic() const {
+    return QualifiedCharacteristic(device_id(), service_uuid(),
+                                   characteristic_uuid());
   }
 
   std::string device_id() const { return GetDeviceAddress(device_handle_); }
@@ -124,19 +131,20 @@ class NativeCharacteristicHandle {
 
   void NotifyValueChanged(const std::vector<uint8_t> &value) const {
     if (characteristic_value_changed_callback_) {
-      characteristic_value_changed_callback_(ToCharacteristicAddress(), value);
+      characteristic_value_changed_callback_(ToQualifiedCharacteristic(),
+                                             value);
     }
   }
 
   void NotifyValueRead(const std::vector<uint8_t> &value) const {
     if (characteristic_value_read_callback_) {
-      characteristic_value_read_callback_(ToCharacteristicAddress(), value);
+      characteristic_value_read_callback_(ToQualifiedCharacteristic(), value);
     }
   }
 
   void NotifyValueWrote() const {
     if (characteristic_value_write_callback_) {
-      characteristic_value_write_callback_(ToCharacteristicAddress());
+      characteristic_value_write_callback_(ToQualifiedCharacteristic());
     }
   }
 

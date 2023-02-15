@@ -48,8 +48,7 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
   final Stream<BleStatus> bleStatusStream =
       const EventChannel('flutter_reactive_ble_status')
           .receiveBroadcastStream()
-          .map((dynamic event) =>
-              BleStatus.values.byName((event as Map)[kBleStatus] as String));
+          .map((dynamic event) => BleStatus.values.byName(event as String));
 
   @override
   Future<void> initialize() => methodChannel.invokeMethod('initialize');
@@ -89,11 +88,11 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
 
   @override
   Future<List<DiscoveredService>> discoverServices(String deviceId) async {
-    final dynamic services = await methodChannel.invokeMethod<dynamic>(
+    final dynamic result = await methodChannel.invokeMethod<dynamic>(
       'discoverServices',
       <String, Object>{kDeviceId: deviceId},
     );
-    return (services[kServices] as List)
+    return (result as List)
         .cast<Map<String, Object?>>()
         .map(DiscoveredServiceExtension.fromMap)
         .toList();

@@ -54,11 +54,6 @@ struct DiscoveredService {
   std::vector<DiscoveredCharacteristic> characteristics;
 };
 
-struct DiscoveredServicesInfo {
-  std::string device_id;
-  std::vector<DiscoveredService> services;
-};
-
 class ErrorReportMixin {
  public:
   int error_code() const { return error_code_; }
@@ -70,7 +65,7 @@ class ErrorReportMixin {
 };
 
 // A class that holds and applys filtering information for scanning.
-class Filter : public ErrorReportMixin {
+class Filter {
  public:
   virtual ~Filter() = default;
 
@@ -79,6 +74,13 @@ class Filter : public ErrorReportMixin {
   virtual bool Unregister() = 0;
 
   virtual const bt_scan_filter_h& handle() const = 0;
+
+  int GetLastError() { return last_error_; }
+
+  std::string GetLastErrorString() { return get_error_message(last_error_); }
+
+ protected:
+  int last_error_;
 };
 
 enum class BleStatus {
@@ -103,7 +105,7 @@ typedef std::function<void(std::unique_ptr<DeviceScanInfo>)> DeviceScanCallback;
 typedef std::function<void(std::string device_address, ConnectionState)>
     ConnectionStateChangedCallback;
 
-class BleTizen : public ErrorReportMixin {
+class BleTizen {
  public:
   ~BleTizen();
 
@@ -141,28 +143,32 @@ class BleTizen : public ErrorReportMixin {
   bool UnsetConnectionStateChangedCallback();
 
   // Reads value from characteristic.
-  bool ReadCharacteristics(const CharacteristicAddress& address,
+  bool ReadCharacteristics(const QualifiedCharacteristic& address,
                            CharacteristicValueReadCallback callback);
 
   // Writes value to characteristic.
-  bool WriteCharacteristics(const CharacteristicAddress& address,
+  bool WriteCharacteristics(const QualifiedCharacteristic& address,
                             const std::vector<uint8_t>& value,
                             CharacteristicValueWriteCallback callback);
 
   // Listens for notification from characteristic.
-  bool ListenNotifications(const CharacteristicAddress& address,
+  bool ListenNotifications(const QualifiedCharacteristic& address,
                            CharacteristicValueChangedCallback callback);
 
   // Stops listening for notifications from characteristic.
-  bool StopNotifications(const CharacteristicAddress& address);
+  bool StopNotifications(const QualifiedCharacteristic& address);
 
   void FowardAllNotifications(CharacteristicValueChangedCallback callback);
 
   void StopFowardingAllNotifications();
 
   // Discovers services adverstised by the device.
-  std::optional<DiscoveredServicesInfo> DiscoverServices(
+  std::optional<std::vector<DiscoveredService>> DiscoverServices(
       const std::string& device_address);
+
+  int GetLastError() { return last_error_; }
+
+  std::string GetLastErrorString() { return get_error_message(last_error_); }
 
  private:
   bool scanning_ = false;
@@ -171,13 +177,15 @@ class BleTizen : public ErrorReportMixin {
   DeviceScanCallback device_scan_callback_;
   ConnectionStateChangedCallback connection_state_changed_callback_;
 
-  std::unordered_map<CharacteristicAddress, NativeCharacteristicHandle,
-                     CharacteristicAddressHasher>
+  std::unordered_map<QualifiedCharacteristic, NativeCharacteristicHandle,
+                     CharacteristicHasher>
       native_handles_;
 
   CharacteristicValueChangedCallback foward_notifications_callback_;
 
   std::vector<std::unique_ptr<Filter>> filters_;
+
+  int last_error_;
 };
 
 #endif  // FLUTTER_PLUGIN_BLE_TIZEN_H_
