@@ -1,3 +1,7 @@
+// Copyright 2023 Samsung Electronics Co., Ltd. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 #include "ble_tizen.h"
 
 #include <bluetooth.h>
@@ -6,6 +10,7 @@
 #include "log.h"
 
 namespace {
+
 /// Gets the uuid of GATT handle.
 uuid GetUuid(const bt_gatt_h &gatt_handle) {
   char *uuid_cstr;
