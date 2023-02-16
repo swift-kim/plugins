@@ -12,7 +12,7 @@
 namespace {
 
 /// Gets the uuid of GATT handle.
-uuid GetUuid(const bt_gatt_h &gatt_handle) {
+Uuid GetUuid(const bt_gatt_h &gatt_handle) {
   char *uuid_cstr;
   bt_gatt_get_uuid(gatt_handle, &uuid_cstr);
   std::string uuid = std::string(uuid_cstr);
@@ -22,7 +22,7 @@ uuid GetUuid(const bt_gatt_h &gatt_handle) {
 
 void GetDiscoveredService(bt_gatt_h service_handle,
                           std::vector<DiscoveredService> *discovered_services) {
-  uuid service_uuid = GetUuid(service_handle);
+  Uuid service_uuid = GetUuid(service_handle);
   DiscoveredService discovered_service;
   discovered_service.service_id = service_uuid;
   bt_gatt_service_foreach_included_services(
@@ -40,7 +40,7 @@ void GetDiscoveredService(bt_gatt_h service_handle,
       service_handle,
       [](int total, int index, bt_gatt_h characteristic_handle,
          void *user_data) {
-        uuid characteristic_uuid = GetUuid(characteristic_handle);
+        Uuid characteristic_uuid = GetUuid(characteristic_handle);
         int properties;
         bt_gatt_characteristic_get_properties(characteristic_handle,
                                               &properties);
@@ -76,7 +76,7 @@ void GetDiscoveredService(bt_gatt_h service_handle,
 // Wrapper around bt_scan_filter_h handle and its operations.
 class FilterImpl : public Filter {
  public:
-  explicit FilterImpl(const uuid &service_uuid) {
+  explicit FilterImpl(const Uuid &service_uuid) {
     bt_adapter_le_scan_filter_create(&handle_);
     bt_adapter_le_scan_filter_set_service_uuid(handle_, service_uuid.c_str());
   };
@@ -184,7 +184,7 @@ bool BleTizen::UnsetBleStatusChangedCallback() {
   return true;
 }
 
-bool BleTizen::Scan(const std::vector<uuid> &service_filters) {
+bool BleTizen::Scan(const std::vector<Uuid> &service_filters) {
   if (scanning_) {
     StopScan();
   }
@@ -317,12 +317,6 @@ bool BleTizen::StopScan() {
   return true;
 }
 
-void BleTizen::SetDeviceScanCallback(DeviceScanCallback callback) {
-  device_scan_callback_ = callback;
-}
-
-void BleTizen::UnsetDeviceScanCallback() { device_scan_callback_ = nullptr; }
-
 bool BleTizen::ConnectToDevice(const std::string &device_address) {
   last_error_ = bt_gatt_connect(device_address.c_str(), false);
   if (last_error_ != BT_ERROR_NONE) {
@@ -378,8 +372,7 @@ bool BleTizen::UnsetConnectionStateChangedCallback() {
 }
 
 bool BleTizen::ReadCharacteristics(
-    const QualifiedCharacteristic &characteristic,
-    CharacteristicValueReadCallback callback) {
+    const QualifiedCharacteristic &characteristic) {
   auto [it, inserted] =
       native_handles_.try_emplace(characteristic, characteristic);
   if (inserted) {
@@ -400,13 +393,10 @@ bool BleTizen::ReadCharacteristics(
     return false;
   }
   native_handle->SetValueReadCallback(
-      [this, callback](QualifiedCharacteristic characteristic,
-                       std::vector<uint8_t> data) {
-        if (callback) {
-          callback(characteristic, data);
-        }
-        if (foward_notifications_callback_) {
-          foward_notifications_callback_(characteristic, data);
+      [this](QualifiedCharacteristic characteristic,
+             std::vector<uint8_t> data) {
+        if (notification_callback_) {
+          notification_callback_(characteristic, data);
         }
       });
 
@@ -473,18 +463,14 @@ bool BleTizen::WriteCharacteristics(
 }
 
 bool BleTizen::ListenNotifications(
-    const QualifiedCharacteristic &characteristic,
-    CharacteristicValueChangedCallback callback) {
+    const QualifiedCharacteristic &characteristic) {
   auto [it, _] = native_handles_.try_emplace(characteristic, characteristic);
   NativeCharacteristicHandle *native_handle = &it->second;
   native_handle->SetValueChangedCallback(
-      [this, callback](QualifiedCharacteristic characteristic,
-                       std::vector<uint8_t> data) {
-        if (callback) {
-          callback(characteristic, data);
-        }
-        if (foward_notifications_callback_) {
-          foward_notifications_callback_(characteristic, data);
+      [this](QualifiedCharacteristic characteristic,
+             std::vector<uint8_t> data) {
+        if (notification_callback_) {
+          notification_callback_(characteristic, data);
         }
       });
 
@@ -519,15 +505,6 @@ bool BleTizen::StopNotifications(
   }
   native_handle->SetValueChangedCallback(nullptr);
   return true;
-}
-
-void BleTizen::FowardAllNotifications(
-    CharacteristicValueChangedCallback callback) {
-  foward_notifications_callback_ = callback;
-}
-
-void BleTizen::StopFowardingAllNotifications() {
-  foward_notifications_callback_ = nullptr;
 }
 
 std::optional<std::vector<DiscoveredService>> BleTizen::DiscoverServices(

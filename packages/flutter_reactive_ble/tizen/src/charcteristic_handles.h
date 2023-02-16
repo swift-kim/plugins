@@ -11,23 +11,23 @@
 #include <functional>
 #include <string>
 
-typedef std::string uuid;
+typedef std::string Uuid;
 
 // A value type class that locates characteristic.
 class QualifiedCharacteristic {
  public:
   QualifiedCharacteristic(const std::string &device_address,
-                          const uuid &service_uuid,
-                          const uuid &characteristic_uuid)
+                          const Uuid &service_uuid,
+                          const Uuid &characteristic_uuid)
       : device_address_(device_address),
         service_uuid_(service_uuid),
         characteristic_uuid_(characteristic_uuid) {}
 
   std::string device_address() const { return device_address_; }
 
-  uuid service_uuid() const { return service_uuid_; }
+  Uuid service_uuid() const { return service_uuid_; }
 
-  uuid characteristic_uuid() const { return characteristic_uuid_; }
+  Uuid characteristic_uuid() const { return characteristic_uuid_; }
 
   bool operator==(const QualifiedCharacteristic &other) const {
     return (device_address_ == other.device_address_ &&
@@ -37,8 +37,8 @@ class QualifiedCharacteristic {
 
  private:
   std::string device_address_;
-  uuid service_uuid_;
-  uuid characteristic_uuid_;
+  Uuid service_uuid_;
+  Uuid characteristic_uuid_;
 };
 
 struct CharacteristicHasher {
@@ -111,9 +111,9 @@ class NativeCharacteristicHandle {
 
   std::string device_id() const { return GetDeviceAddress(device_handle_); }
 
-  uuid service_uuid() const { return GetUuid(service_handle_); }
+  Uuid service_uuid() const { return GetUuid(service_handle_); }
 
-  uuid characteristic_uuid() const { return GetUuid(characteristic_handle_); }
+  Uuid characteristic_uuid() const { return GetUuid(characteristic_handle_); }
 
   bt_gatt_h characteristic_handle() const { return characteristic_handle_; }
 
@@ -171,7 +171,7 @@ class NativeCharacteristicHandle {
   CharacteristicValueWriteCallback characteristic_value_write_callback_;
 
   /// Gets the uuid of GATT handle.
-  static uuid GetUuid(const bt_gatt_h &gatt_handle) {
+  static Uuid GetUuid(const bt_gatt_h &gatt_handle) {
     char *uuid_cstr;
     bt_gatt_get_uuid(gatt_handle, &uuid_cstr);
     std::string uuid = std::string(uuid_cstr);

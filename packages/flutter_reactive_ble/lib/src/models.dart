@@ -11,8 +11,6 @@ const String kCharacteristics = 'characteristics';
 const String kConnectionState = 'connection_state';
 const String kDeviceId = 'device_id';
 const String kDeviceName = 'device_name';
-const String kDiscoveredDevice = 'discovered_device';
-const String kFailure = 'failure';
 const String kIncludedServices = 'included_services';
 const String kIsIndicatable = 'is_indicatable';
 const String kIsNotifiable = 'is_notifiable';
@@ -20,7 +18,6 @@ const String kIsReadable = 'is_readable';
 const String kIsWritableWithoutResponse = 'is_writable_without_response';
 const String kIsWritableWithResponse = 'is_writable_with_response';
 const String kManufacturerData = 'manufacturer_data';
-const String kMessage = 'message';
 const String kQualifiedCharacteristic = 'qualified_characteristic';
 const String kResult = 'result';
 const String kRssi = 'rssi';
@@ -28,32 +25,18 @@ const String kServiceData = 'service_data';
 const String kServiceId = 'service_id';
 const String kServiceIds = 'service_ids';
 const String kValue = 'value';
+const String kFailure = 'failure';
 
 extension CharacteristicValueExtension on CharacteristicValue {
   static CharacteristicValue fromMap(Map<String, Object> map) {
-    final qualifiedCharacteristicMap =
+    final characteristicMap =
         (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
-    final resultMap = map[kResult] as Map;
-    final valueList = (resultMap[kValue] as List?)?.cast<int>();
-    final failureMap = resultMap[kFailure] as Map?;
-
-    if (valueList != null) {
-      return CharacteristicValue(
-        characteristic: QualifiedCharacteristicExtension.fromMap(
-            qualifiedCharacteristicMap),
-        result: Result.success(valueList),
-      );
-    } else if (failureMap != null) {
-      return CharacteristicValue(
-        characteristic: QualifiedCharacteristicExtension.fromMap(
-            qualifiedCharacteristicMap),
-        result: Result.failure(GenericFailure(
-          code: CharacteristicValueUpdateError.unknown,
-          message: failureMap[kMessage] as String,
-        )),
-      );
-    }
-    throw ArgumentError();
+    final valueList = (map[kResult] as List).cast<int>();
+    return CharacteristicValue(
+      characteristic:
+          QualifiedCharacteristicExtension.fromMap(characteristicMap),
+      result: Result.success(valueList),
+    );
   }
 }
 
@@ -138,51 +121,33 @@ extension QualifiedCharacteristicExtension on QualifiedCharacteristic {
 
 extension ScanResultExtension on ScanResult {
   static ScanResult fromMap(Map<String, Object> map) {
-    final discoveredDeviceMap =
-        (map[kDiscoveredDevice] as Map?)?.cast<String, Object>();
-    final failureMap = map[kFailure] as Map?;
-
-    if (discoveredDeviceMap != null) {
-      return ScanResult(
-        result: Result.success(
-            DiscoveredDeviceExtension.fromMap(discoveredDeviceMap)),
-      );
-    } else if (failureMap != null) {
-      return ScanResult(
-        result: Result.failure(GenericFailure(
-          code: ScanFailure.unknown,
-          message: failureMap[kMessage] as String,
-        )),
-      );
-    }
-    throw ArgumentError();
+    final discoveredDevice = DiscoveredDeviceExtension.fromMap(map);
+    return ScanResult(result: Result.success(discoveredDevice));
   }
 }
 
 extension WriteCharacteristicInfoExtension on WriteCharacteristicInfo {
   static WriteCharacteristicInfo fromMap(Map<String, Object> map) {
-    final qualifiedCharacteristicMap =
+    final characteristicMap =
         (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
     final resultMap = map[kResult] as Map;
-    final unit = resultMap[kValue] as bool?;
-    final failureMap = resultMap[kFailure] as Map?;
+    final failure = resultMap[kFailure] as String?;
 
-    if (unit != null) {
+    if (failure != null) {
       return WriteCharacteristicInfo(
-        characteristic: QualifiedCharacteristicExtension.fromMap(
-            qualifiedCharacteristicMap),
-        result: const Result.success(Unit()),
-      );
-    } else if (failureMap != null) {
-      return WriteCharacteristicInfo(
-        characteristic: QualifiedCharacteristicExtension.fromMap(
-            qualifiedCharacteristicMap),
+        characteristic:
+            QualifiedCharacteristicExtension.fromMap(characteristicMap),
         result: Result.failure(GenericFailure(
           code: WriteCharacteristicFailure.unknown,
-          message: failureMap[kMessage] as String,
+          message: failure,
         )),
       );
+    } else {
+      return WriteCharacteristicInfo(
+        characteristic:
+            QualifiedCharacteristicExtension.fromMap(characteristicMap),
+        result: const Result.success(Unit()),
+      );
     }
-    throw Exception();
   }
 }

@@ -14,7 +14,7 @@
 #include "charcteristic_handles.h"
 
 struct ServiceDataEntry {
-  uuid service_id;
+  Uuid service_id;
   std::vector<std::uint8_t> data;
 };
 
@@ -27,19 +27,19 @@ struct DeviceScanInfo {
 
   std::vector<uint8_t> manufacturer_data;
 
-  std::vector<uuid> service_uuids;
+  std::vector<Uuid> service_uuids;
 
   int32_t rssi;
 };
 
 struct ServiceWithCharacteristics {
-  uuid service_id;
-  std::vector<uuid> characteristics;
+  Uuid service_id;
+  std::vector<Uuid> characteristics;
 };
 
 struct DiscoveredCharacteristic {
-  uuid characteristic_id;
-  uuid service_id;
+  Uuid characteristic_id;
+  Uuid service_id;
   bool is_readable;
   bool is_writable_with_response;
   bool is_writable_without_response;
@@ -48,8 +48,8 @@ struct DiscoveredCharacteristic {
 };
 
 struct DiscoveredService {
-  uuid service_id;
-  std::vector<uuid> characteristic_uuids;
+  Uuid service_id;
+  std::vector<Uuid> characteristic_uuids;
   std::vector<DiscoveredService> included_services;
   std::vector<DiscoveredCharacteristic> characteristics;
 };
@@ -122,14 +122,14 @@ class BleTizen {
   bool UnsetBleStatusChangedCallback();
 
   // Scans for surrounding devices.
-  bool Scan(const std::vector<uuid>& service_filters);
+  bool Scan(const std::vector<Uuid>& service_filters);
 
   // Stops scanning for devices.
   bool StopScan();
 
-  void SetDeviceScanCallback(DeviceScanCallback callback);
-
-  void UnsetDeviceScanCallback();
+  void SetDeviceScanCallback(DeviceScanCallback callback) {
+    device_scan_callback_ = callback;
+  }
 
   // Connects to device with |device_address|.
   bool ConnectToDevice(const std::string& device_address);
@@ -143,8 +143,7 @@ class BleTizen {
   bool UnsetConnectionStateChangedCallback();
 
   // Reads value from characteristic.
-  bool ReadCharacteristics(const QualifiedCharacteristic& address,
-                           CharacteristicValueReadCallback callback);
+  bool ReadCharacteristics(const QualifiedCharacteristic& address);
 
   // Writes value to characteristic.
   bool WriteCharacteristics(const QualifiedCharacteristic& address,
@@ -152,15 +151,14 @@ class BleTizen {
                             CharacteristicValueWriteCallback callback);
 
   // Listens for notification from characteristic.
-  bool ListenNotifications(const QualifiedCharacteristic& address,
-                           CharacteristicValueChangedCallback callback);
+  bool ListenNotifications(const QualifiedCharacteristic& address);
 
   // Stops listening for notifications from characteristic.
   bool StopNotifications(const QualifiedCharacteristic& address);
 
-  void FowardAllNotifications(CharacteristicValueChangedCallback callback);
-
-  void StopFowardingAllNotifications();
+  void SetNotificationCallback(CharacteristicValueChangedCallback callback) {
+    notification_callback_ = callback;
+  }
 
   // Discovers services adverstised by the device.
   std::optional<std::vector<DiscoveredService>> DiscoverServices(
@@ -181,7 +179,7 @@ class BleTizen {
                      CharacteristicHasher>
       native_handles_;
 
-  CharacteristicValueChangedCallback foward_notifications_callback_;
+  CharacteristicValueChangedCallback notification_callback_;
 
   std::vector<std::unique_ptr<Filter>> filters_;
 
