@@ -216,31 +216,31 @@ class BleScanStreamHandler : public FlStreamHandler {
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
     ble_tizen_->SetDeviceScanCallback(
-        [this](std::unique_ptr<DeviceScanInfo> device_scan_info) {
+        [this](std::unique_ptr<DiscoveredDevice> device) {
           flutter::EncodableMap service_data;
-          for (const ServiceDataEntry &entry : device_scan_info->service_data) {
-            service_data[flutter::EncodableValue(entry.service_id)] =
-                flutter::EncodableValue(entry.data);
+          for (const auto &[service_id, data] : device->service_data) {
+            service_data[flutter::EncodableValue(service_id)] =
+                flutter::EncodableValue(data);
           }
           flutter::EncodableList service_ids;
-          for (const Uuid &service_id : device_scan_info->service_ids) {
+          for (const Uuid &service_id : device->service_ids) {
             service_ids.push_back(flutter::EncodableValue(service_id));
           }
-          flutter::EncodableMap discovered_device = {
+          flutter::EncodableMap map = {
               {flutter::EncodableValue(kDeviceId),
-               flutter::EncodableValue(device_scan_info->device_id)},
+               flutter::EncodableValue(device->device_id)},
               {flutter::EncodableValue(kDeviceName),
-               flutter::EncodableValue(device_scan_info->name)},
+               flutter::EncodableValue(device->name)},
               {flutter::EncodableValue(kServiceData),
                flutter::EncodableValue(service_data)},
               {flutter::EncodableValue(kManufacturerData),
-               flutter::EncodableValue(device_scan_info->manufacturer_data)},
+               flutter::EncodableValue(device->manufacturer_data)},
               {flutter::EncodableValue(kRssi),
-               flutter::EncodableValue(device_scan_info->rssi)},
+               flutter::EncodableValue(device->rssi)},
               {flutter::EncodableValue(kServiceIds),
                flutter::EncodableValue(service_ids)},
           };
-          events_->Success(flutter::EncodableValue(discovered_device));
+          events_->Success(flutter::EncodableValue(map));
         });
     return nullptr;
   }
@@ -472,7 +472,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         return;
       }
 
-      if (!ble_tizen_->ReadCharacteristics(characteristic.value())) {
+      if (!ble_tizen_->ReadCharacteristic(characteristic.value())) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;

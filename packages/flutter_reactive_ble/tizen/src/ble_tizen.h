@@ -6,6 +6,7 @@
 #define FLUTTER_PLUGIN_BLE_TIZEN_H_
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -13,38 +14,23 @@
 
 #include "types.h"
 
-struct ServiceDataEntry {
-  Uuid service_id;
-  std::vector<std::uint8_t> data;
-};
-
-struct DeviceScanInfo {
+struct DiscoveredDevice {
   std::string device_id;
-
   std::string name;
-
-  std::vector<ServiceDataEntry> service_data;
-
   std::vector<uint8_t> manufacturer_data;
-
   std::vector<Uuid> service_ids;
-
-  int32_t rssi;
-};
-
-struct ServiceWithCharacteristics {
-  Uuid service_id;
-  std::vector<Uuid> characteristics;
+  std::map<Uuid, std::vector<std::uint8_t>> service_data;
+  int32_t rssi = 0;
 };
 
 struct DiscoveredCharacteristic {
   Uuid characteristic_id;
   Uuid service_id;
-  bool is_readable;
-  bool is_writable_with_response;
-  bool is_writable_without_response;
-  bool is_notifiable;
-  bool is_indicatable;
+  bool is_readable = false;
+  bool is_writable_with_response = false;
+  bool is_writable_without_response = false;
+  bool is_notifiable = false;
+  bool is_indicatable = false;
 };
 
 struct DiscoveredService {
@@ -52,16 +38,6 @@ struct DiscoveredService {
   std::vector<Uuid> characteristic_ids;
   std::vector<DiscoveredCharacteristic> characteristics;
   std::vector<DiscoveredService> included_services;
-};
-
-class ErrorReportMixin {
- public:
-  int error_code() const { return error_code_; }
-
-  std::string error_message() const;
-
- protected:
-  int error_code_;
 };
 
 enum class BleStatus {
@@ -80,7 +56,8 @@ enum class ConnectionState {
 typedef std::function<void(BleStatus)> BleStatusChangedCallback;
 
 // A device scan callback.
-typedef std::function<void(std::unique_ptr<DeviceScanInfo>)> DeviceScanCallback;
+typedef std::function<void(std::unique_ptr<DiscoveredDevice>)>
+    DeviceScanCallback;
 
 // A ble connection state changed callback.
 typedef std::function<void(const std::string& device_id, ConnectionState)>
@@ -124,12 +101,12 @@ class BleTizen {
   bool UnsetConnectionStateChangedCallback();
 
   // Reads value from characteristic.
-  bool ReadCharacteristics(const QualifiedCharacteristic& characteristic);
+  bool ReadCharacteristic(const QualifiedCharacteristic& characteristic);
 
   // Writes value to characteristic.
-  bool WriteCharacteristics(const QualifiedCharacteristic& characteristic,
-                            const std::vector<uint8_t>& value,
-                            CharacteristicValueWriteCallback callback);
+  bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
+                           const std::vector<uint8_t>& value,
+                           CharacteristicValueWriteCallback callback);
 
   // Listens for notification from characteristic.
   bool ListenNotifications(const QualifiedCharacteristic& characteristic);
