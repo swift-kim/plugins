@@ -101,7 +101,6 @@ bool BleTizen::SetBleStatusChangedCallback(BleStatusChangedCallback callback) {
   last_error_ = bt_adapter_set_state_changed_cb(
       [](int result, bt_adapter_state_e adapter_state, void *user_data) {
         BleTizen *self = static_cast<BleTizen *>(user_data);
-
         if (self->ble_status_changed_callback_) {
           self->ble_status_changed_callback_(adapter_state == BT_ADAPTER_ENABLED
                                                  ? BleStatus::kEnabled
@@ -309,38 +308,15 @@ bool BleTizen::UnsetConnectionStateChangedCallback() {
 
 bool BleTizen::ReadCharacteristic(
     const QualifiedCharacteristic &characteristic) {
-  auto [it, inserted] =
-      native_handles_.try_emplace(characteristic, characteristic);
-  if (inserted) {
-    LOG_DEBUG("A new characteristic info was inserted: [%s %s %s].",
-              characteristic.device_id().c_str(),
-              characteristic.service_id().c_str(),
-              characteristic.characteristic_id().c_str());
-  } else {
-    LOG_DEBUG("Using exising characteristic info: [%s %s %s].",
-              characteristic.device_id().c_str(),
-              characteristic.service_id().c_str(),
-              characteristic.characteristic_id().c_str());
-  }
-
-  CharacteristicHandle *native_handle = &it->second;
-  if (!native_handle->IsReadable()) {
+  if (!characteristic.IsReadable()) {
     LOG_ERROR("The read operation is not allowed for this characteristic.");
     last_error_ = BT_ERROR_NOT_SUPPORTED;
     return false;
   }
 
-  native_handle->SetValueReadCallback(
-      [this](QualifiedCharacteristic characteristic,
-             const std::vector<uint8_t> &data) {
-        if (notification_callback_) {
-          notification_callback_(characteristic, data);
-        }
-      });
-
   // TODO: Handle locks when callbacks are run by different threads.
   last_error_ = bt_gatt_client_read_value(
-      native_handle->characteristic_handle(),
+      characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
         if (result != BT_ERROR_NONE) {
           // TODO: Add error callbacks.
@@ -348,22 +324,26 @@ bool BleTizen::ReadCharacteristic(
                     get_error_message(result));
           return;
         }
-        auto *native_handle = static_cast<CharacteristicHandle *>(user_data);
-        char *value = nullptr;
-        int length = 0;
-        int ret = bt_gatt_get_value(request_handle, &value, &length);
-        if (ret != BT_ERROR_NONE) {
-          LOG_ERROR("Failed to retrieve a value: %s", get_error_message(ret));
-          return;
+
+        BleTizen *self = static_cast<BleTizen *>(user_data);
+        std::shared_ptr<QualifiedCharacteristic> characteristic =
+            self->FindCharacteristic(request_handle);
+        if (self->notification_callback_ && characteristic) {
+          char *value = nullptr;
+          int length = 0;
+          int ret = bt_gatt_get_value(request_handle, &value, &length);
+          if (ret != BT_ERROR_NONE) {
+            LOG_ERROR("Failed to retrieve a value: %s", get_error_message(ret));
+            return;
+          }
+          std::vector<uint8_t> bytes(value, value + length);
+          free(value);
+
+          self->notification_callback_(*characteristic, bytes);
         }
-        std::vector<uint8_t> bytes(value, value + length);
-        free(value);
-        native_handle->NotifyValueRead(bytes);
-        native_handle->SetValueReadCallback(nullptr);
       },
-      native_handle);
+      this);
   if (last_error_ != BT_ERROR_NONE) {
-    native_handle->SetValueReadCallback(nullptr);
     return false;
   }
   return true;
@@ -373,32 +353,38 @@ bool BleTizen::WriteCharacteristic(
     const QualifiedCharacteristic &characteristic,
     const std::vector<uint8_t> &value,
     CharacteristicValueWriteCallback callback) {
-  auto [it, _] = native_handles_.try_emplace(characteristic, characteristic);
-  CharacteristicHandle *native_handle = &it->second;
-  last_error_ = bt_gatt_set_value(native_handle->characteristic_handle(),
+  last_error_ = bt_gatt_set_value(characteristic.handle(),
                                   reinterpret_cast<const char *>(value.data()),
                                   static_cast<int>(value.size()));
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
 
-  native_handle->SetValueWroteCallback(callback);
+  if (characteristic_value_write_callback_) {
+    LOG_ERROR("A write operation is already in progress.");
+    last_error_ = TIZEN_ERROR_ALREADY_IN_PROGRESS;
+    return false;
+  }
+  characteristic_value_write_callback_ = callback;
 
   last_error_ = bt_gatt_client_write_value(
-      native_handle->characteristic_handle(),
+      characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
         if (result != BT_ERROR_NONE) {
-          // TODO: Add error callbacks.
           LOG_ERROR("The write operation resulted in an error: %s",
                     get_error_message(result));
+          return;
         }
-        auto *native_handle = static_cast<CharacteristicHandle *>(user_data);
-        native_handle->NotifyValueWrote();
-        native_handle->SetValueWroteCallback(nullptr);
+
+        BleTizen *self = static_cast<BleTizen *>(user_data);
+        std::shared_ptr<QualifiedCharacteristic> characteristic =
+            self->FindCharacteristic(request_handle);
+        if (self->characteristic_value_write_callback_ && characteristic) {
+          self->characteristic_value_write_callback_(*characteristic);
+        }
       },
-      native_handle);
+      this);
   if (last_error_ != BT_ERROR_NONE) {
-    native_handle->SetValueWroteCallback(nullptr);
     return false;
   }
   return true;
@@ -406,26 +392,19 @@ bool BleTizen::WriteCharacteristic(
 
 bool BleTizen::ListenNotifications(
     const QualifiedCharacteristic &characteristic) {
-  auto [it, _] = native_handles_.try_emplace(characteristic, characteristic);
-  CharacteristicHandle *native_handle = &it->second;
-  native_handle->SetValueChangedCallback(
-      [this](QualifiedCharacteristic characteristic,
-             const std::vector<uint8_t> &data) {
-        if (notification_callback_) {
-          notification_callback_(characteristic, data);
-        }
-      });
-
   last_error_ = bt_gatt_client_set_characteristic_value_changed_cb(
-      native_handle->characteristic_handle(),
-      [](bt_gatt_h characteristic, char *value, int len, void *user_data) {
-        auto *native_handle = static_cast<CharacteristicHandle *>(user_data);
-        std::vector<uint8_t> bytes(value, value + len);
-        native_handle->NotifyValueChanged(bytes);
+      characteristic.handle(),
+      [](bt_gatt_h handle, char *value, int len, void *user_data) {
+        BleTizen *self = static_cast<BleTizen *>(user_data);
+        std::shared_ptr<QualifiedCharacteristic> characteristic =
+            self->FindCharacteristic(handle);
+        if (self->notification_callback_ && characteristic) {
+          std::vector<uint8_t> bytes(value, value + len);
+          self->notification_callback_(*characteristic, bytes);
+        }
       },
-      native_handle);
+      this);
   if (last_error_ != BT_ERROR_NONE) {
-    native_handle->SetValueChangedCallback(nullptr);
     return false;
   }
   return true;
@@ -433,17 +412,12 @@ bool BleTizen::ListenNotifications(
 
 bool BleTizen::StopNotifications(
     const QualifiedCharacteristic &characteristic) {
-  auto it = native_handles_.find(characteristic);
-  if (it == native_handles_.end()) {
-    return true;
-  }
-  CharacteristicHandle *native_handle = &it->second;
   last_error_ = bt_gatt_client_unset_characteristic_value_changed_cb(
-      native_handle->characteristic_handle());
+      characteristic.handle());
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  native_handle->SetValueChangedCallback(nullptr);
+  RemoveCharacteristic(characteristic.handle());
   return true;
 }
 

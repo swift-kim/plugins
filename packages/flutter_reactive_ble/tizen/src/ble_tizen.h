@@ -55,13 +55,18 @@ enum class ConnectionState {
 
 typedef std::function<void(BleStatus)> BleStatusChangedCallback;
 
-// A device scan callback.
 typedef std::function<void(std::unique_ptr<DiscoveredDevice>)>
     DeviceScanCallback;
 
-// A ble connection state changed callback.
 typedef std::function<void(const std::string& device_id, ConnectionState)>
     ConnectionStateChangedCallback;
+
+typedef std::function<void(const QualifiedCharacteristic& characteristic,
+                           const std::vector<uint8_t>&)>
+    CharacteristicValueChangedCallback;
+
+typedef std::function<void(const QualifiedCharacteristic& characteristic)>
+    CharacteristicValueWriteCallback;
 
 class BleTizen {
  public:
@@ -122,22 +127,62 @@ class BleTizen {
   std::optional<std::vector<DiscoveredService>> DiscoverServices(
       const std::string& device_id);
 
+  std::shared_ptr<QualifiedCharacteristic> AddCharacteristic(
+      const std::string& device_id, const Uuid& service_id,
+      const Uuid& characteristic_id) {
+    auto instance = std::make_shared<QualifiedCharacteristic>(
+        device_id, service_id, characteristic_id);
+    return characteristics_.emplace_back(std::move(instance));
+  }
+
+  std::shared_ptr<QualifiedCharacteristic> FindCharacteristicById(
+      const std::string& device_id, const Uuid& service_id,
+      const Uuid& characteristic_id) {
+    for (const auto& characteristic : characteristics_) {
+      if (device_id == characteristic->device_id() &&
+          service_id == characteristic->service_id() &&
+          characteristic_id == characteristic->characteristic_id()) {
+        return characteristic;
+      }
+    }
+    return nullptr;
+  }
+
   int GetLastError() { return last_error_; }
 
   std::string GetLastErrorString() { return get_error_message(last_error_); }
 
  private:
+  std::shared_ptr<QualifiedCharacteristic> FindCharacteristic(
+      bt_gatt_h handle) {
+    for (const auto& characteristic : characteristics_) {
+      if (handle == characteristic->handle()) {
+        return characteristic;
+      }
+    }
+    return nullptr;
+  }
+
+  void RemoveCharacteristic(bt_gatt_h handle) {
+    auto iter = std::find_if(
+        characteristics_.begin(), characteristics_.end(),
+        [handle](std::shared_ptr<QualifiedCharacteristic> instance) {
+          return instance->handle() == handle;
+        });
+    if (iter != characteristics_.end()) {
+      characteristics_.erase(iter);
+    }
+  }
+
   bool is_scanning_ = false;
 
   BleStatusChangedCallback ble_status_changed_callback_;
   DeviceScanCallback device_scan_callback_;
   ConnectionStateChangedCallback connection_state_changed_callback_;
+  CharacteristicValueWriteCallback characteristic_value_write_callback_;
   CharacteristicValueChangedCallback notification_callback_;
 
-  std::unordered_map<QualifiedCharacteristic, CharacteristicHandle,
-                     CharacteristicHasher>
-      native_handles_;
-
+  std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
   std::vector<std::unique_ptr<ScanFilter>> filters_;
 
   int last_error_;

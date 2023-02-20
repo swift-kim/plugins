@@ -1,4 +1,0 @@
-// BtGatt
-// BtGattClient
-// BtGattService
-// BtGattCharacteristic

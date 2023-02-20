@@ -130,7 +130,7 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
     ble_tizen_->SetNotificationCallback(
-        [this](QualifiedCharacteristic characteristic,
+        [this](const QualifiedCharacteristic &characteristic,
                const std::vector<uint8_t> &data) {
           flutter::EncodableMap characteristic_map = {
               {flutter::EncodableValue(kDeviceId),
@@ -383,7 +383,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       std::vector<Uuid> service_ids;
       for (const flutter::EncodableValue &service_id : service_id_list) {
         if (std::holds_alternative<std::string>(service_id)) {
-          service_ids.push_back(std::get<std::string>(service_id));
+          service_ids.emplace_back(std::get<std::string>(service_id));
         }
       }
 
@@ -393,86 +393,126 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         return;
       };
       result->Success();
-    } else if (method_name == "connectToDevice") {
-      std::optional<std::string> device_id =
-          GetDeviceIdArgument(method_call, result.get());
-      if (!device_id.has_value()) {
-        return;
-      }
+    } else if (method_name == "connectToDevice" ||
+               method_name == "disconnectDevice" ||
+               method_name == "discoverServices") {
+      HandleDeviceOperation(method_call, std::move(result));
+    } else if (method_name == "subscribeToNotifications" ||
+               method_name == "stopSubscribingToNotifications" ||
+               method_name == "readCharacteristic" ||
+               method_name == "writeCharacteristicWithResponse" ||
+               method_name == "writeCharacteristicWithoutResponse") {
+      HandleCharacteristicOperation(method_call, std::move(result));
+    } else {
+      result->NotImplemented();
+    }
+  }
 
-      if (!ble_tizen_->ConnectToDevice(device_id.value())) {
+  void HandleDeviceOperation(const FlMethodCall &method_call,
+                             std::unique_ptr<FlMethodResult> result) {
+    const auto &method_name = method_call.method_name();
+    const auto *arguments =
+        std::get_if<flutter::EncodableMap>(method_call.arguments());
+    if (!arguments) {
+      result->Error("Invalid arguments", "No arguments provided.");
+      return;
+    }
+
+    std::string device_id;
+    if (!GetValueFromEncodableMap(arguments, kDeviceId, device_id)) {
+      result->Error("Invalid arguments", MissingArgumentError(kDeviceId));
+      return;
+    }
+
+    if (method_name == "connectToDevice") {
+      if (!ble_tizen_->ConnectToDevice(device_id)) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;
       };
       result->Success();
     } else if (method_name == "disconnectDevice") {
-      std::optional<std::string> device_id =
-          GetDeviceIdArgument(method_call, result.get());
-      if (!device_id.has_value()) {
-        return;
-      }
-
-      if (!ble_tizen_->DisconnectFromDevice(device_id.value())) {
+      if (!ble_tizen_->DisconnectFromDevice(device_id)) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;
       };
       result->Success();
     } else if (method_name == "discoverServices") {
-      std::optional<std::string> device_id =
-          GetDeviceIdArgument(method_call, result.get());
-      if (!device_id.has_value()) {
-        return;
-      }
-
       std::optional<std::vector<DiscoveredService>> services =
-          ble_tizen_->DiscoverServices(device_id.value());
+          ble_tizen_->DiscoverServices(device_id);
       if (!services.has_value()) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;
       }
-
       flutter::EncodableList service_list;
       for (const DiscoveredService &service : services.value()) {
         service_list.push_back(ServiceToEncodableValue(service));
       }
       result->Success(flutter::EncodableValue(service_list));
-    } else if (method_name == "subscribeToNotifications") {
-      std::optional<QualifiedCharacteristic> characteristic =
-          GetQualifiedCharacteristicArgument(method_call, result.get());
-      if (!characteristic.has_value()) {
-        return;
-      }
+    }
+  }
 
-      if (!ble_tizen_->ListenNotifications(characteristic.value())) {
+  void HandleCharacteristicOperation(const FlMethodCall &method_call,
+                                     std::unique_ptr<FlMethodResult> result) {
+    const auto &method_name = method_call.method_name();
+    const auto *arguments =
+        std::get_if<flutter::EncodableMap>(method_call.arguments());
+    if (!arguments) {
+      result->Error("Invalid arguments", "No arguments provided.");
+      return;
+    }
+
+    flutter::EncodableMap qualified;
+    if (!GetValueFromEncodableMap(arguments, kQualifiedCharacteristic,
+                                  qualified)) {
+      result->Error("Invalid arguments",
+                    MissingArgumentError(kQualifiedCharacteristic));
+      return;
+    }
+    std::string device_id;
+    if (!GetValueFromEncodableMap(&qualified, kDeviceId, device_id)) {
+      result->Error("Invalid arguments", MissingArgumentError(kDeviceId));
+      return;
+    }
+    std::string service_id;
+    if (!GetValueFromEncodableMap(&qualified, kServiceId, service_id)) {
+      result->Error("Invalid arguments", MissingArgumentError(kServiceId));
+      return;
+    }
+    std::string characteristic_id;
+    if (!GetValueFromEncodableMap(&qualified, kCharacteristicId,
+                                  characteristic_id)) {
+      result->Error("Invalid arguments",
+                    MissingArgumentError(kCharacteristicId));
+      return;
+    }
+
+    std::shared_ptr<QualifiedCharacteristic> characteristic =
+        ble_tizen_->FindCharacteristicById(device_id, service_id,
+                                           characteristic_id);
+    if (!characteristic) {
+      characteristic = ble_tizen_->AddCharacteristic(device_id, service_id,
+                                                     characteristic_id);
+    }
+
+    if (method_name == "subscribeToNotifications") {
+      if (!ble_tizen_->ListenNotifications(*characteristic)) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;
       }
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
-      std::optional<QualifiedCharacteristic> characteristic =
-          GetQualifiedCharacteristicArgument(method_call, result.get());
-      if (!characteristic.has_value()) {
-        return;
-      }
-
-      if (!ble_tizen_->StopNotifications(characteristic.value())) {
+      if (!ble_tizen_->StopNotifications(*characteristic)) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;
       }
       result->Success();
     } else if (method_name == "readCharacteristic") {
-      std::optional<QualifiedCharacteristic> characteristic =
-          GetQualifiedCharacteristicArgument(method_call, result.get());
-      if (!characteristic.has_value()) {
-        return;
-      }
-
-      if (!ble_tizen_->ReadCharacteristic(characteristic.value())) {
+      if (!ble_tizen_->ReadCharacteristic(*characteristic)) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());
         return;
@@ -484,60 +524,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
     } else if (method_name == "writeCharacteristicWithoutResponse") {
       // TODO
       result->NotImplemented();
-    } else {
-      result->NotImplemented();
     }
-  }
-
-  std::optional<std::string> GetDeviceIdArgument(
-      const FlMethodCall &method_call, FlMethodResult *result) {
-    const auto *arguments =
-        std::get_if<flutter::EncodableMap>(method_call.arguments());
-    if (!arguments) {
-      result->Error("Invalid arguments", "No arguments provided.");
-      return std::nullopt;
-    }
-    std::string device_id;
-    if (!GetValueFromEncodableMap(arguments, kDeviceId, device_id)) {
-      result->Error("Invalid arguments", MissingArgumentError(kDeviceId));
-      return std::nullopt;
-    }
-    return device_id;
-  }
-
-  std::optional<QualifiedCharacteristic> GetQualifiedCharacteristicArgument(
-      const FlMethodCall &method_call, FlMethodResult *result) {
-    const auto *arguments =
-        std::get_if<flutter::EncodableMap>(method_call.arguments());
-    if (!arguments) {
-      result->Error("Invalid arguments", "No arguments provided.");
-      return std::nullopt;
-    }
-    flutter::EncodableMap characteristic;
-    if (!GetValueFromEncodableMap(arguments, kQualifiedCharacteristic,
-                                  characteristic)) {
-      result->Error("Invalid arguments",
-                    MissingArgumentError(kQualifiedCharacteristic));
-      return std::nullopt;
-    }
-    std::string device_id;
-    if (!GetValueFromEncodableMap(&characteristic, kDeviceId, device_id)) {
-      result->Error("Invalid arguments", MissingArgumentError(kDeviceId));
-      return std::nullopt;
-    }
-    std::string service_id;
-    if (!GetValueFromEncodableMap(&characteristic, kServiceId, service_id)) {
-      result->Error("Invalid arguments", MissingArgumentError(kServiceId));
-      return std::nullopt;
-    }
-    std::string characteristic_id;
-    if (!GetValueFromEncodableMap(&characteristic, kCharacteristicId,
-                                  characteristic_id)) {
-      result->Error("Invalid arguments",
-                    MissingArgumentError(kCharacteristicId));
-      return std::nullopt;
-    }
-    return QualifiedCharacteristic(device_id, service_id, characteristic_id);
   }
 
   std::unique_ptr<FlEventChannel> connected_device_channel_;
