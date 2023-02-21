@@ -93,7 +93,7 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
       <String, Object>{kDeviceId: deviceId},
     );
     return (result as List)
-        .cast<Map<String, Object?>>()
+        .cast<Map<Object?, Object?>>()
         .map(DiscoveredServiceExtension.fromMap)
         .toList();
   }

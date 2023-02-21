@@ -51,7 +51,7 @@ extension ConnectionStateUpdateExtension on ConnectionStateUpdate {
 }
 
 extension DiscoveredCharacteristicExtension on DiscoveredCharacteristic {
-  static DiscoveredCharacteristic fromMap(Map<String, Object?> map) =>
+  static DiscoveredCharacteristic fromMap(Map<Object?, Object?> map) =>
       DiscoveredCharacteristic(
         characteristicId: Uuid.parse(map[kCharacteristicId] as String),
         serviceId: Uuid.parse(map[kServiceId] as String),
@@ -82,13 +82,13 @@ extension DiscoveredDeviceExtension on DiscoveredDevice {
 }
 
 extension DiscoveredServiceExtension on DiscoveredService {
-  static DiscoveredService fromMap(Map<String, Object?> map) {
+  static DiscoveredService fromMap(Map<Object?, Object?> map) {
     final includedServices = (map[kIncludedServices] as List)
-        .cast<Map<String, Object?>>()
+        .cast<Map<Object?, Object?>>()
         .map(DiscoveredServiceExtension.fromMap)
         .toList();
     final characteristics = (map[kCharacteristics] as List)
-        .cast<Map<String, Object?>>()
+        .cast<Map<Object?, Object?>>()
         .map(DiscoveredCharacteristicExtension.fromMap)
         .toList();
     final characteristicIds = (map[kCharacteristicIds] as List)
