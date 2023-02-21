@@ -34,10 +34,6 @@ class QualifiedCharacteristic {
   bt_gatt_h handle() const { return characteristic_; }
 
  private:
-  static std::string GetDeviceId(bt_gatt_client_h device_handle);
-
-  static Uuid GetUuid(bt_gatt_h gatt_handle);
-
   std::string device_id_;
   Uuid service_id_;
   Uuid characteristic_id_;

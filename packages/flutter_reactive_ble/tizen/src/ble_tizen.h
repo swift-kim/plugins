@@ -5,12 +5,14 @@
 #ifndef FLUTTER_PLUGIN_BLE_TIZEN_H_
 #define FLUTTER_PLUGIN_BLE_TIZEN_H_
 
+#include <bluetooth_type.h>
+
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "qualified_characteristic.h"
@@ -56,29 +58,29 @@ enum class ConnectionState {
   kDisconnected,
 };
 
-typedef std::function<void(BleStatus)> BleStatusChangedCallback;
+typedef std::function<void(BleStatus status)> BleStatusChangedCallback;
 
-typedef std::function<void(std::unique_ptr<DiscoveredDevice>)>
-    DeviceScanCallback;
+typedef std::function<void(const DiscoveredDevice& device)> DeviceScanCallback;
 
-typedef std::function<void(const std::string& device_id, ConnectionState)>
+typedef std::function<void(const std::string& device_id, ConnectionState state)>
     ConnectionStateChangedCallback;
 
 typedef std::function<void(const QualifiedCharacteristic& characteristic,
-                           const std::vector<uint8_t>&)>
-    CharacteristicValueChangedCallback;
+                           const std::vector<uint8_t>& bytes)>
+    CharacteristicUpdateCallback;
 
 typedef std::function<void(const QualifiedCharacteristic& characteristic)>
-    CharacteristicValueWriteCallback;
+    CharacteristicWriteCallback;
 
 class BleTizen {
  public:
+  explicit BleTizen() {}
   ~BleTizen() = default;
 
-  // Initializes the bluetooth low enery module.
+  // Initializes the BLE module.
   bool Initialize();
 
-  // Clean ups the bluetooth low enery module.
+  // Cleans up the BLE module.
   bool Deinitialize();
 
   BleStatus GetBleStatus();
@@ -87,7 +89,7 @@ class BleTizen {
 
   bool UnsetBleStatusChangedCallback();
 
-  // Scans for surrounding devices.
+  // Starts scanning for devices with optional |service_ids|.
   bool Scan(const std::vector<Uuid>& service_ids);
 
   // Stops scanning for devices.
@@ -97,10 +99,10 @@ class BleTizen {
     device_scan_callback_ = std::move(callback);
   }
 
-  // Connects to device with |device_id|.
+  // Connects to a device identified by |device_id|.
   bool ConnectToDevice(const std::string& device_id);
 
-  // Disconnects from device with |device_id|.
+  // Disconnects from the device.
   bool DisconnectFromDevice(const std::string& device_id);
 
   bool SetConnectionStateChangedCallback(
@@ -108,29 +110,29 @@ class BleTizen {
 
   bool UnsetConnectionStateChangedCallback();
 
-  // Reads value from characteristic.
-  bool ReadCharacteristic(const QualifiedCharacteristic& characteristic);
-
-  // Writes value to characteristic.
-  bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
-                           const std::vector<uint8_t>& value,
-                           CharacteristicValueWriteCallback callback);
-
-  // Listens for notification from characteristic.
-  bool ListenNotifications(const QualifiedCharacteristic& characteristic);
-
-  // Stops listening for notifications from characteristic.
-  bool StopNotifications(const QualifiedCharacteristic& characteristic);
-
-  void SetNotificationCallback(CharacteristicValueChangedCallback callback) {
-    notification_callback_ = std::move(callback);
-  }
-
   // Discovers services adverstised by the device.
   std::optional<std::vector<DiscoveredService>> DiscoverServices(
       const std::string& device_id);
 
-  std::shared_ptr<QualifiedCharacteristic> AddCharacteristic(
+  // Reads a value from the specified characteristic.
+  bool ReadCharacteristic(const QualifiedCharacteristic& characteristic);
+
+  // Writes a value to the specified characteristic.
+  bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
+                           const std::vector<uint8_t>& value,
+                           CharacteristicWriteCallback callback);
+
+  // Subscribes to updates from the specified characteristic.
+  bool ListenNotifications(const QualifiedCharacteristic& characteristic);
+
+  // Unsubscribes from the characteristic.
+  bool StopNotifications(const QualifiedCharacteristic& characteristic);
+
+  void SetNotificationCallback(CharacteristicUpdateCallback callback) {
+    notification_callback_ = std::move(callback);
+  }
+
+  std::shared_ptr<QualifiedCharacteristic> RegisterCharacteristic(
       const std::string& device_id, const Uuid& service_id,
       const Uuid& characteristic_id) {
     auto instance = std::make_shared<QualifiedCharacteristic>(
@@ -166,7 +168,7 @@ class BleTizen {
     return nullptr;
   }
 
-  void RemoveCharacteristic(bt_gatt_h handle) {
+  void UnregisterCharacteristic(bt_gatt_h handle) {
     auto iter = std::find_if(
         characteristics_.begin(), characteristics_.end(),
         [handle](std::shared_ptr<QualifiedCharacteristic> instance) {
@@ -182,8 +184,8 @@ class BleTizen {
   BleStatusChangedCallback ble_status_changed_callback_;
   DeviceScanCallback device_scan_callback_;
   ConnectionStateChangedCallback connection_state_changed_callback_;
-  CharacteristicValueWriteCallback characteristic_value_write_callback_;
-  CharacteristicValueChangedCallback notification_callback_;
+  CharacteristicUpdateCallback notification_callback_;
+  CharacteristicWriteCallback characteristic_write_callback_;
 
   std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
   std::vector<std::unique_ptr<ScanFilter>> filters_;

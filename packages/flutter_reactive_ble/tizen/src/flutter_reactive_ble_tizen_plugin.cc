@@ -13,8 +13,10 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "ble_tizen.h"
@@ -174,20 +176,20 @@ class ConnectionUpdateStreamHandler : public FlStreamHandler {
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
     ble_tizen_->SetConnectionStateChangedCallback(
-        [this](const std::string &device_id, ConnectionState connection_state) {
-          std::string state = "disconnected";
-          if (connection_state == ConnectionState::kConnecting) {
-            state = "connecting";
-          } else if (connection_state == ConnectionState::kConnected) {
-            state = "connected";
-          } else if (connection_state == ConnectionState::kDisconnecting) {
-            state = "disconnecting";
+        [this](const std::string &device_id, ConnectionState state) {
+          std::string connection_state = "disconnected";
+          if (state == ConnectionState::kConnecting) {
+            connection_state = "connecting";
+          } else if (state == ConnectionState::kConnected) {
+            connection_state = "connected";
+          } else if (state == ConnectionState::kDisconnecting) {
+            connection_state = "disconnecting";
           }
           flutter::EncodableMap map = {
               {flutter::EncodableValue(kDeviceId),
                flutter::EncodableValue(device_id)},
               {flutter::EncodableValue(kConnectionState),
-               flutter::EncodableValue(state)},
+               flutter::EncodableValue(connection_state)},
           };
           events_->Success(flutter::EncodableValue(map));
         });
@@ -215,33 +217,32 @@ class BleScanStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    ble_tizen_->SetDeviceScanCallback(
-        [this](std::unique_ptr<DiscoveredDevice> device) {
-          flutter::EncodableList service_ids;
-          for (const Uuid &service_id : device->service_ids) {
-            service_ids.emplace_back(flutter::EncodableValue(service_id));
-          }
-          flutter::EncodableMap service_data;
-          for (const auto &[service_id, data] : device->service_data) {
-            service_data[flutter::EncodableValue(service_id)] =
-                flutter::EncodableValue(data);
-          }
-          flutter::EncodableMap map = {
-              {flutter::EncodableValue(kDeviceId),
-               flutter::EncodableValue(device->device_id)},
-              {flutter::EncodableValue(kDeviceName),
-               flutter::EncodableValue(device->name)},
-              {flutter::EncodableValue(kManufacturerData),
-               flutter::EncodableValue(device->manufacturer_data)},
-              {flutter::EncodableValue(kServiceIds),
-               flutter::EncodableValue(service_ids)},
-              {flutter::EncodableValue(kServiceData),
-               flutter::EncodableValue(service_data)},
-              {flutter::EncodableValue(kRssi),
-               flutter::EncodableValue(device->rssi)},
-          };
-          events_->Success(flutter::EncodableValue(map));
-        });
+    ble_tizen_->SetDeviceScanCallback([this](const DiscoveredDevice &device) {
+      flutter::EncodableList service_ids;
+      for (const Uuid &service_id : device.service_ids) {
+        service_ids.emplace_back(flutter::EncodableValue(service_id));
+      }
+      flutter::EncodableMap service_data;
+      for (const auto &[service_id, data] : device.service_data) {
+        service_data[flutter::EncodableValue(service_id)] =
+            flutter::EncodableValue(data);
+      }
+      flutter::EncodableMap map = {
+          {flutter::EncodableValue(kDeviceId),
+           flutter::EncodableValue(device.device_id)},
+          {flutter::EncodableValue(kDeviceName),
+           flutter::EncodableValue(device.name)},
+          {flutter::EncodableValue(kManufacturerData),
+           flutter::EncodableValue(device.manufacturer_data)},
+          {flutter::EncodableValue(kServiceIds),
+           flutter::EncodableValue(service_ids)},
+          {flutter::EncodableValue(kServiceData),
+           flutter::EncodableValue(service_data)},
+          {flutter::EncodableValue(kRssi),
+           flutter::EncodableValue(device.rssi)},
+      };
+      events_->Success(flutter::EncodableValue(map));
+    });
     return nullptr;
   }
 
@@ -269,21 +270,21 @@ class BleStatusStreamHandler : public FlStreamHandler {
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
 
-    BleStatus ble_status = ble_tizen_->GetBleStatus();
-    std::string status = "unknown";
-    if (ble_status == BleStatus::kEnabled) {
-      status = "ready";
-    } else if (ble_status == BleStatus::kDisabled) {
-      status = "poweredOff";
-    } else if (ble_status == BleStatus::kNotSupported) {
-      status = "unsupported";
+    BleStatus status = ble_tizen_->GetBleStatus();
+    std::string ble_status = "unknown";
+    if (status == BleStatus::kEnabled) {
+      ble_status = "ready";
+    } else if (status == BleStatus::kDisabled) {
+      ble_status = "poweredOff";
+    } else if (status == BleStatus::kNotSupported) {
+      ble_status = "unsupported";
     }
-    events_->Success(flutter::EncodableValue(status));
+    events_->Success(flutter::EncodableValue(ble_status));
 
-    ble_tizen_->SetBleStatusChangedCallback([this](BleStatus ble_status) {
-      std::string status =
-          ble_status == BleStatus::kEnabled ? "ready" : "poweredOff";
-      events_->Success(flutter::EncodableValue(status));
+    ble_tizen_->SetBleStatusChangedCallback([this](BleStatus status) {
+      std::string ble_status =
+          status == BleStatus::kEnabled ? "ready" : "poweredOff";
+      events_->Success(flutter::EncodableValue(ble_status));
     });
     return nullptr;
   }
@@ -493,8 +494,8 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         ble_tizen_->FindCharacteristicById(device_id, service_id,
                                            characteristic_id);
     if (!characteristic) {
-      characteristic = ble_tizen_->AddCharacteristic(device_id, service_id,
-                                                     characteristic_id);
+      characteristic = ble_tizen_->RegisterCharacteristic(device_id, service_id,
+                                                          characteristic_id);
     }
 
     if (method_name == "subscribeToNotifications") {
@@ -512,6 +513,11 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       }
       result->Success();
     } else if (method_name == "readCharacteristic") {
+      if (!characteristic->IsReadable()) {
+        result->Error("Operation failed",
+                      "Read operation not allowed on this characteristic.");
+        return;
+      }
       if (!ble_tizen_->ReadCharacteristic(*characteristic)) {
         result->Error(std::to_string(ble_tizen_->GetLastError()),
                       ble_tizen_->GetLastErrorString());

@@ -14,6 +14,7 @@ ScanFilter::ScanFilter(const Uuid &service_id) {
     LOG_ERROR("Failed to create a scan filter handle.");
     return;
   }
+
   ret = bt_adapter_le_scan_filter_set_service_uuid(handle_, service_id.c_str());
   if (ret != BT_ERROR_NONE) {
     LOG_ERROR("Failed to set a service UUID for the scan filter.");
