@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef FLUTTER_PLUGIN_TYPES_H_
-#define FLUTTER_PLUGIN_TYPES_H_
+#ifndef FLUTTER_PLUGIN_QUALIFIED_CHARACTERISTIC_H_
+#define FLUTTER_PLUGIN_QUALIFIED_CHARACTERISTIC_H_
 
-#include <bluetooth.h>
 #include <bluetooth_type.h>
 
 #include <string>
@@ -48,32 +47,4 @@ class QualifiedCharacteristic {
   bt_gatt_h characteristic_ = nullptr;
 };
 
-// A wrapper around a native bt_scan_filter_h handle.
-class ScanFilter {
- public:
-  explicit ScanFilter(const Uuid &service_id);
-  virtual ~ScanFilter();
-
-  // Prevent copying.
-  ScanFilter(const ScanFilter &handle) = delete;
-  ScanFilter &operator=(const ScanFilter &handle) = delete;
-
-  ScanFilter(ScanFilter &&other) : handle_(other.handle_) {}
-  ScanFilter &operator=(ScanFilter &&other) {
-    handle_ = other.handle_;
-    return *this;
-  }
-
-  bool Register();
-
-  bool Unregister();
-
-  static bool UnregisterAll();
-
-  bt_scan_filter_h handle() const { return handle_; }
-
- private:
-  bt_scan_filter_h handle_;
-};
-
-#endif  // FLUTTER_PLUGIN_TYPES_H_
+#endif  // FLUTTER_PLUGIN_QUALIFIED_CHARACTERISTIC_H_

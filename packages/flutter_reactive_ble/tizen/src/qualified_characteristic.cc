@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "types.h"
+#include "qualified_characteristic.h"
+
+#include <bluetooth.h>
 
 #include "log.h"
 
@@ -17,13 +19,11 @@ QualifiedCharacteristic::QualifiedCharacteristic(const std::string &device_id,
     LOG_ERROR("Failed to create a client handle: %s", get_error_message(ret));
     return;
   }
-
   ret = bt_gatt_client_get_service(device_, service_id.c_str(), &service_);
   if (ret != BT_ERROR_NONE) {
     LOG_ERROR("Failed to create a service handle: %s", get_error_message(ret));
     return;
   }
-
   ret = bt_gatt_service_get_characteristic(service_, characteristic_id.c_str(),
                                            &characteristic_);
   if (ret != BT_ERROR_NONE) {
@@ -74,50 +74,4 @@ Uuid QualifiedCharacteristic::GetUuid(bt_gatt_h gatt_handle) {
   std::string uuid = std::string(uuid_cstr);
   free(uuid_cstr);
   return uuid;
-}
-
-ScanFilter::ScanFilter(const Uuid &service_id) {
-  int ret = bt_adapter_le_scan_filter_create(&handle_);
-  if (ret != BT_ERROR_NONE) {
-    LOG_ERROR("Failed to create a scan filter handle.");
-    return;
-  }
-  ret = bt_adapter_le_scan_filter_set_service_uuid(handle_, service_id.c_str());
-  if (ret != BT_ERROR_NONE) {
-    LOG_ERROR("Failed to set a service UUID for a scan filter.");
-    return;
-  }
-};
-
-ScanFilter::~ScanFilter() {
-  if (handle_) {
-    bt_adapter_le_scan_filter_destroy(handle_);
-  }
-};
-
-bool ScanFilter::Register() {
-  int ret = bt_adapter_le_scan_filter_register(handle_);
-  if (ret != BT_ERROR_NONE) {
-    LOG_ERROR("Filter registration failed: %s", get_error_message(ret));
-    return false;
-  }
-  return true;
-};
-
-bool ScanFilter::Unregister() {
-  int ret = bt_adapter_le_scan_filter_unregister(handle_);
-  if (ret != BT_ERROR_NONE) {
-    LOG_ERROR("Filter unregistration failed: %s", get_error_message(ret));
-    return false;
-  }
-  return true;
-};
-
-bool ScanFilter::UnregisterAll() {
-  int ret = bt_adapter_le_scan_filter_unregister_all();
-  if (ret != BT_ERROR_NONE) {
-    LOG_ERROR("Filter unregistration failed: %s", get_error_message(ret));
-    return false;
-  }
-  return true;
 }

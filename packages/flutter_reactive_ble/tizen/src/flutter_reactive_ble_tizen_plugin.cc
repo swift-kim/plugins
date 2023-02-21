@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "ble_tizen.h"
-#include "log.h"
+#include "qualified_characteristic.h"
 
 namespace {
 
@@ -79,11 +79,11 @@ flutter::EncodableValue ServiceToEncodableValue(
     const DiscoveredService &service) {
   flutter::EncodableList characteristic_ids;
   for (const Uuid &characteristic_id : service.characteristic_ids) {
-    characteristic_ids.push_back(flutter::EncodableValue(characteristic_id));
+    characteristic_ids.emplace_back(flutter::EncodableValue(characteristic_id));
   }
   flutter::EncodableList included_services;
   for (const DiscoveredService &included_service : service.included_services) {
-    included_services.push_back(ServiceToEncodableValue(included_service));
+    included_services.emplace_back(ServiceToEncodableValue(included_service));
   }
   flutter::EncodableList characteristics;
   for (const DiscoveredCharacteristic &characteristic :
@@ -104,7 +104,7 @@ flutter::EncodableValue ServiceToEncodableValue(
         {flutter::EncodableValue(kIsIndicatable),
          flutter::EncodableValue(characteristic.is_indicatable)},
     };
-    characteristics.push_back(flutter::EncodableValue(map));
+    characteristics.emplace_back(flutter::EncodableValue(map));
   }
   flutter::EncodableMap map = {
       {flutter::EncodableValue(kServiceId),
@@ -217,28 +217,28 @@ class BleScanStreamHandler : public FlStreamHandler {
     events_ = std::move(events);
     ble_tizen_->SetDeviceScanCallback(
         [this](std::unique_ptr<DiscoveredDevice> device) {
+          flutter::EncodableList service_ids;
+          for (const Uuid &service_id : device->service_ids) {
+            service_ids.emplace_back(flutter::EncodableValue(service_id));
+          }
           flutter::EncodableMap service_data;
           for (const auto &[service_id, data] : device->service_data) {
             service_data[flutter::EncodableValue(service_id)] =
                 flutter::EncodableValue(data);
-          }
-          flutter::EncodableList service_ids;
-          for (const Uuid &service_id : device->service_ids) {
-            service_ids.push_back(flutter::EncodableValue(service_id));
           }
           flutter::EncodableMap map = {
               {flutter::EncodableValue(kDeviceId),
                flutter::EncodableValue(device->device_id)},
               {flutter::EncodableValue(kDeviceName),
                flutter::EncodableValue(device->name)},
-              {flutter::EncodableValue(kServiceData),
-               flutter::EncodableValue(service_data)},
               {flutter::EncodableValue(kManufacturerData),
                flutter::EncodableValue(device->manufacturer_data)},
-              {flutter::EncodableValue(kRssi),
-               flutter::EncodableValue(device->rssi)},
               {flutter::EncodableValue(kServiceIds),
                flutter::EncodableValue(service_ids)},
+              {flutter::EncodableValue(kServiceData),
+               flutter::EncodableValue(service_data)},
+              {flutter::EncodableValue(kRssi),
+               flutter::EncodableValue(device->rssi)},
           };
           events_->Success(flutter::EncodableValue(map));
         });
@@ -268,16 +268,15 @@ class BleStatusStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    auto ble_status = ble_tizen_->GetBleStatus();
+
+    BleStatus ble_status = ble_tizen_->GetBleStatus();
     std::string status = "unknown";
-    if (ble_status.has_value()) {
-      if (ble_status == BleStatus::kEnabled) {
-        status = "ready";
-      } else if (ble_status == BleStatus::kDisabled) {
-        status = "poweredOff";
-      } else if (ble_status == BleStatus::kNotSupported) {
-        status = "unsupported";
-      }
+    if (ble_status == BleStatus::kEnabled) {
+      status = "ready";
+    } else if (ble_status == BleStatus::kDisabled) {
+      status = "poweredOff";
+    } else if (ble_status == BleStatus::kNotSupported) {
+      status = "unsupported";
     }
     events_->Success(flutter::EncodableValue(status));
 
@@ -375,6 +374,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         result->Error("Invalid arguments", "No arguments provided.");
         return;
       }
+
       flutter::EncodableList service_id_list;
       if (!GetValueFromEncodableMap(arguments, kServiceIds, service_id_list)) {
         result->Error("Invalid arguments", MissingArgumentError(kServiceIds));
@@ -448,7 +448,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       }
       flutter::EncodableList service_list;
       for (const DiscoveredService &service : services.value()) {
-        service_list.push_back(ServiceToEncodableValue(service));
+        service_list.emplace_back(ServiceToEncodableValue(service));
       }
       result->Success(flutter::EncodableValue(service_list));
     }
@@ -527,12 +527,11 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
     }
   }
 
+  std::unique_ptr<BleTizen> ble_tizen_;
   std::unique_ptr<FlEventChannel> connected_device_channel_;
   std::unique_ptr<FlEventChannel> char_event_channel_;
   std::unique_ptr<FlEventChannel> scan_event_channel_;
   std::unique_ptr<FlEventChannel> ble_status_channel_;
-
-  std::unique_ptr<BleTizen> ble_tizen_;
 };
 
 }  // namespace

@@ -57,14 +57,14 @@ void AddDiscoveredService(bt_gatt_h service_handle,
 
         auto *discovered_service = static_cast<DiscoveredService *>(user_data);
         characteristic.service_id = discovered_service->service_id;
-        discovered_service->characteristic_ids.push_back(
+        discovered_service->characteristic_ids.emplace_back(
             characteristic.characteristic_id);
-        discovered_service->characteristics.push_back(characteristic);
+        discovered_service->characteristics.emplace_back(characteristic);
         return true;
       },
       &discovered_service);
 
-  discovered_services->push_back(discovered_service);
+  discovered_services->emplace_back(discovered_service);
 }
 
 }  // namespace
@@ -85,7 +85,7 @@ bool BleTizen::Deinitialize() {
   return true;
 }
 
-std::optional<BleStatus> BleTizen::GetBleStatus() {
+BleStatus BleTizen::GetBleStatus() {
   bt_adapter_state_e adapter_state;
   last_error_ = bt_adapter_get_state(&adapter_state);
   if (last_error_ == BT_ERROR_NONE) {
@@ -94,7 +94,7 @@ std::optional<BleStatus> BleTizen::GetBleStatus() {
   } else if (last_error_ == BT_ERROR_NOT_SUPPORTED) {
     return BleStatus::kNotSupported;
   }
-  return std::nullopt;
+  return BleStatus::kUnknown;
 }
 
 bool BleTizen::SetBleStatusChangedCallback(BleStatusChangedCallback callback) {

@@ -5,6 +5,7 @@
 #ifndef FLUTTER_PLUGIN_BLE_TIZEN_H_
 #define FLUTTER_PLUGIN_BLE_TIZEN_H_
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -12,7 +13,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "types.h"
+#include "qualified_characteristic.h"
+#include "scan_filter.h"
 
 struct DiscoveredDevice {
   std::string device_id;
@@ -41,8 +43,9 @@ struct DiscoveredService {
 };
 
 enum class BleStatus {
-  kDisabled,
+  kUnknown,
   kEnabled,
+  kDisabled,
   kNotSupported,
 };
 
@@ -78,7 +81,7 @@ class BleTizen {
   // Clean ups the bluetooth low enery module.
   bool Deinitialize();
 
-  std::optional<BleStatus> GetBleStatus();
+  BleStatus GetBleStatus();
 
   bool SetBleStatusChangedCallback(BleStatusChangedCallback callback);
 
