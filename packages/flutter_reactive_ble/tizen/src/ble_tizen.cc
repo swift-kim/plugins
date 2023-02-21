@@ -158,17 +158,20 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
 
         char *name = nullptr;
         int ret = bt_adapter_le_get_scan_result_device_name(
-            info, BT_ADAPTER_LE_PACKET_ADVERTISING, &name);
+            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &name);
+        if (ret == BT_ERROR_NO_DATA) {
+          // Retry with a different packet type.
+          ret = bt_adapter_le_get_scan_result_device_name(
+              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &name);
+        }
         if (ret == BT_ERROR_NONE) {
           device.name = std::string(name);
           free(name);
-        } else if (ret == BT_ERROR_NO_DATA) {
-          // TODO: Retry with the BT_ADAPTER_LE_PACKET_SCAN_RESPONSE type.
-          LOG_INFO("No name info available from the device %s.",
-                   info->remote_address);
-        } else {
+        } else if (ret != BT_ERROR_NO_DATA) {
+          // TODO(swift-kim): Add error callbacks.
           LOG_ERROR("Could not obtain name info from the device %s.",
                     info->remote_address);
+          return;
         }
 
         int manufacturer_id = 0;
@@ -177,16 +180,19 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         ret = bt_adapter_le_get_scan_result_manufacturer_data(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &manufacturer_id,
             &manufacturer_data, &manufacturer_data_len);
+        if (ret == BT_ERROR_NO_DATA) {
+          ret = bt_adapter_le_get_scan_result_manufacturer_data(
+              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &manufacturer_id,
+              &manufacturer_data, &manufacturer_data_len);
+        }
         if (ret == BT_ERROR_NONE) {
           device.manufacturer_data = std::vector<uint8_t>(
               manufacturer_data, manufacturer_data + manufacturer_data_len);
           free(manufacturer_data);
-        } else if (ret == BT_ERROR_NO_DATA) {
-          LOG_INFO("No manufacturer info available from the device %s.",
-                   info->remote_address);
-        } else {
+        } else if (ret != BT_ERROR_NO_DATA) {
           LOG_ERROR("Could not obtain manufacturer info from the device %s.",
                     info->remote_address);
+          return;
         }
 
         char **service_ids = nullptr;
@@ -194,18 +200,21 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         ret = bt_adapter_le_get_scan_result_service_uuids(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_ids,
             &service_count);
+        if (ret == BT_ERROR_NO_DATA) {
+          ret = bt_adapter_le_get_scan_result_service_uuids(
+              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &service_ids,
+              &service_count);
+        }
         if (ret == BT_ERROR_NONE) {
           for (int i = 0; i < service_count; ++i) {
             device.service_ids.emplace_back(std::string(service_ids[i]));
             free(service_ids[i]);
           }
           free(service_ids);
-        } else if (ret == BT_ERROR_NO_DATA) {
-          LOG_INFO("No service UUIDs available from the device %s.",
-                   info->remote_address);
-        } else {
+        } else if (ret != BT_ERROR_NO_DATA) {
           LOG_ERROR("Could not obtain service UUIDs from the device %s.",
                     info->remote_address);
+          return;
         }
 
         bt_adapter_le_service_data_s *service_data = nullptr;
@@ -213,6 +222,11 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         ret = bt_adapter_le_get_scan_result_service_data_list(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_data,
             &service_data_count);
+        if (ret == BT_ERROR_NO_DATA) {
+          ret = bt_adapter_le_get_scan_result_service_data_list(
+              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &service_data,
+              &service_data_count);
+        }
         if (ret == BT_ERROR_NONE) {
           for (int i = 0; i < service_data_count; ++i) {
             std::string service_id = service_data[i].service_uuid;
@@ -223,13 +237,10 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
           }
           bt_adapter_le_free_service_data_list(service_data,
                                                service_data_count);
-
-        } else if (ret == BT_ERROR_NO_DATA) {
-          LOG_INFO("No service data available from the device %s.",
-                   info->remote_address);
-        } else {
+        } else if (ret != BT_ERROR_NO_DATA) {
           LOG_ERROR("Could not obtain service data from the device %s.",
                     info->remote_address);
+          return;
         }
 
         device.rssi = info->rssi;
