@@ -11,27 +11,28 @@
 
 namespace {
 
-/// Gets the uuid of GATT handle.
 Uuid GetUuid(const bt_gatt_h &gatt_handle) {
-  char *uuid_cstr;
-  bt_gatt_get_uuid(gatt_handle, &uuid_cstr);
+  char *uuid_cstr = nullptr;
+  int ret = bt_gatt_get_uuid(gatt_handle, &uuid_cstr);
+  if (ret != BT_ERROR_NONE) {
+    return std::string();
+  }
   std::string uuid = std::string(uuid_cstr);
   free(uuid_cstr);
   return uuid;
 }
 
-void GetDiscoveredService(bt_gatt_h service_handle,
+void AddDiscoveredService(bt_gatt_h service_handle,
                           std::vector<DiscoveredService> *discovered_services) {
-  Uuid service_uuid = GetUuid(service_handle);
   DiscoveredService discovered_service;
-  discovered_service.service_id = service_uuid;
+  discovered_service.service_id = GetUuid(service_handle);
+
   bt_gatt_service_foreach_included_services(
       service_handle,
       [](int total, int index, bt_gatt_h included_service_handle,
-         void *user_data) {
-        DiscoveredService *discovered_service =
-            static_cast<DiscoveredService *>(user_data);
-        GetDiscoveredService(included_service_handle,
+         void *user_data) -> bool {
+        auto *discovered_service = static_cast<DiscoveredService *>(user_data);
+        AddDiscoveredService(included_service_handle,
                              &discovered_service->included_services);
         return true;
       },
@@ -39,31 +40,26 @@ void GetDiscoveredService(bt_gatt_h service_handle,
   bt_gatt_service_foreach_characteristics(
       service_handle,
       [](int total, int index, bt_gatt_h characteristic_handle,
-         void *user_data) {
-        Uuid characteristic_uuid = GetUuid(characteristic_handle);
-        int properties;
+         void *user_data) -> bool {
+        int properties = 0;
         bt_gatt_characteristic_get_properties(characteristic_handle,
                                               &properties);
 
-        DiscoveredCharacteristic discovered_characteristic;
-        discovered_characteristic.characteristic_id = characteristic_uuid;
-        discovered_characteristic.is_readable =
-            properties & BT_GATT_PROPERTY_READ;
-        discovered_characteristic.is_writable_with_response =
+        DiscoveredCharacteristic characteristic = {};
+        characteristic.characteristic_id = GetUuid(characteristic_handle);
+        characteristic.is_readable = properties & BT_GATT_PROPERTY_READ;
+        characteristic.is_writable_with_response =
             properties & BT_GATT_PROPERTY_WRITE;
-        discovered_characteristic.is_writable_without_response =
+        characteristic.is_writable_without_response =
             properties & BT_GATT_PROPERTY_WRITE_WITHOUT_RESPONSE;
-        discovered_characteristic.is_notifiable =
-            properties & BT_GATT_PROPERTY_NOTIFY;
-        discovered_characteristic.is_indicatable =
-            properties & BT_GATT_PROPERTY_INDICATE;
+        characteristic.is_notifiable = properties & BT_GATT_PROPERTY_NOTIFY;
+        characteristic.is_indicatable = properties & BT_GATT_PROPERTY_INDICATE;
 
-        DiscoveredService *discovered_service =
-            static_cast<DiscoveredService *>(user_data);
-        discovered_characteristic.service_id = discovered_service->service_id;
-        discovered_service->characteristic_uuids.push_back(characteristic_uuid);
-        discovered_service->characteristics.push_back(
-            discovered_characteristic);
+        auto *discovered_service = static_cast<DiscoveredService *>(user_data);
+        characteristic.service_id = discovered_service->service_id;
+        discovered_service->characteristic_ids.push_back(
+            characteristic.characteristic_id);
+        discovered_service->characteristics.push_back(characteristic);
         return true;
       },
       &discovered_service);
@@ -72,61 +68,6 @@ void GetDiscoveredService(bt_gatt_h service_handle,
 }
 
 }  // namespace
-
-// Wrapper around bt_scan_filter_h handle and its operations.
-class FilterImpl : public Filter {
- public:
-  explicit FilterImpl(const Uuid &service_uuid) {
-    bt_adapter_le_scan_filter_create(&handle_);
-    bt_adapter_le_scan_filter_set_service_uuid(handle_, service_uuid.c_str());
-  };
-
-  virtual ~FilterImpl() { bt_adapter_le_scan_filter_destroy(handle_); };
-
-  // Prevent copying.
-  FilterImpl(const FilterImpl &handle) = delete;
-  FilterImpl &operator=(const FilterImpl &handle) = delete;
-
-  FilterImpl(FilterImpl &&other) : handle_(std::move(other.handle_)) {}
-  FilterImpl &operator=(FilterImpl &&other) {
-    handle_ = std::move(other.handle_);
-    return *this;
-  }
-
-  static int UnregisterAll() {
-    return bt_adapter_le_scan_filter_unregister_all();
-  }
-
-  // |Filter|
-  bool Register() override {
-    last_error_ = bt_adapter_le_scan_filter_register(handle_);
-    if (last_error_ != BT_ERROR_NONE) {
-      LOG_ERROR("Filter registration failed: %s.",
-                get_error_message(last_error_));
-      return false;
-    }
-    return true;
-  };
-
-  // |Filter|
-  bool Unregister() override {
-    last_error_ = bt_adapter_le_scan_filter_unregister(handle_);
-    if (last_error_ != BT_ERROR_NONE) {
-      LOG_ERROR("Filter unregistration failed: %s.",
-                get_error_message(last_error_));
-      return false;
-    }
-    return true;
-  };
-
-  // |Filter|
-  const bt_scan_filter_h &handle() const override { return handle_; }
-
- private:
-  bt_scan_filter_h handle_;
-};
-
-BleTizen::~BleTizen() = default;
 
 bool BleTizen::Initialize() {
   last_error_ = bt_initialize();
@@ -159,19 +100,19 @@ std::optional<BleStatus> BleTizen::GetBleStatus() {
 bool BleTizen::SetBleStatusChangedCallback(BleStatusChangedCallback callback) {
   last_error_ = bt_adapter_set_state_changed_cb(
       [](int result, bt_adapter_state_e adapter_state, void *user_data) {
-        BleTizen *ble_tizen = static_cast<BleTizen *>(user_data);
+        BleTizen *self = static_cast<BleTizen *>(user_data);
 
-        if (ble_tizen->ble_status_changed_callback_) {
-          ble_tizen->ble_status_changed_callback_(
-              adapter_state == BT_ADAPTER_ENABLED ? BleStatus::kEnabled
-                                                  : BleStatus::kDisabled);
+        if (self->ble_status_changed_callback_) {
+          self->ble_status_changed_callback_(adapter_state == BT_ADAPTER_ENABLED
+                                                 ? BleStatus::kEnabled
+                                                 : BleStatus::kDisabled);
         }
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  ble_status_changed_callback_ = callback;
+  ble_status_changed_callback_ = std::move(callback);
   return true;
 }
 
@@ -184,158 +125,155 @@ bool BleTizen::UnsetBleStatusChangedCallback() {
   return true;
 }
 
-bool BleTizen::Scan(const std::vector<Uuid> &service_filters) {
-  if (scanning_) {
+bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
+  if (is_scanning_) {
     StopScan();
   }
 
-  for (const auto &uuid : service_filters) {
-    std::unique_ptr<FilterImpl> filter = std::make_unique<FilterImpl>(uuid);
-    if (!filter->Register()) {
-      last_error_ = filter->GetLastError();
-      return false;
+  for (const auto &uuid : service_ids) {
+    std::unique_ptr<ScanFilter> filter = std::make_unique<ScanFilter>(uuid);
+    if (filter->Register()) {
+      filters_.emplace_back(std::move(filter));
+    } else {
+      LOG_ERROR("Ignoring scan filter: %s", uuid.c_str());
     }
-    filters_.emplace_back(std::move(filter));
   }
 
   // TODO: Handle locks when callbacks are run by different threads.
   last_error_ = bt_adapter_le_start_scan(
       [](int result, bt_adapter_le_device_scan_result_info_s *info,
          void *user_data) {
-        BleTizen *ble_tizen = static_cast<BleTizen *>(user_data);
-        std::unique_ptr<DeviceScanInfo> device_scan_info =
+        BleTizen *self = static_cast<BleTizen *>(user_data);
+
+        std::unique_ptr<DeviceScanInfo> scan_info =
             std::make_unique<DeviceScanInfo>();
+        scan_info->device_id = std::string(info->remote_address);
+        scan_info->rssi = info->rssi;
 
-        // Get device address.
-        device_scan_info->address = std::string(info->remote_address);
-
-        // Get device name.
-        char *name;
-        ble_tizen->last_error_ = bt_adapter_le_get_scan_result_device_name(
-            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &name);
-        if (ble_tizen->last_error_ == BT_ERROR_NONE) {
-          device_scan_info->name = std::string(name);
+        char *name = nullptr;
+        int ret = bt_adapter_le_get_scan_result_device_name(
+            info, BT_ADAPTER_LE_PACKET_ADVERTISING, &name);
+        if (ret == BT_ERROR_NONE) {
+          scan_info->name = std::string(name);
           free(name);
-        } else if (ble_tizen->last_error_ == BT_ERROR_NO_DATA) {
-          // Leave the name data empty.
+        } else if (ret == BT_ERROR_NO_DATA) {
+          // TODO: Retry with the BT_ADAPTER_LE_PACKET_SCAN_RESPONSE type.
+          LOG_INFO("Could not obtain name info from the device %s.",
+                   info->remote_address);
         } else {
+          self->last_error_ = ret;
           return;
         }
 
-        // Get manufacturer data.
         int manufacturer_id;
-        char *manufacturer_data;
-        int manufacturer_data_len;
-        ble_tizen->last_error_ =
-            bt_adapter_le_get_scan_result_manufacturer_data(
-                info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &manufacturer_id,
-                &manufacturer_data, &manufacturer_data_len);
-        if (ble_tizen->last_error_ == BT_ERROR_NONE) {
-          device_scan_info->manufacturer_data = std::vector<uint8_t>(
+        char *manufacturer_data = nullptr;
+        int manufacturer_data_len = 0;
+        ret = bt_adapter_le_get_scan_result_manufacturer_data(
+            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &manufacturer_id,
+            &manufacturer_data, &manufacturer_data_len);
+        if (ret == BT_ERROR_NONE) {
+          scan_info->manufacturer_data = std::vector<uint8_t>(
               manufacturer_data, manufacturer_data + manufacturer_data_len);
           free(manufacturer_data);
-        } else if (ble_tizen->last_error_ == BT_ERROR_NO_DATA) {
-          // Leave the manufacturer data empty.
+        } else if (ret == BT_ERROR_NO_DATA) {
+          LOG_INFO("Could not obtain manufacturer info from the device %s.",
+                   info->remote_address);
         } else {
+          self->last_error_ = ret;
           return;
         }
 
-        // Get service uuids.
-        char **service_uuids;
-        int service_count;
-        ble_tizen->last_error_ = bt_adapter_le_get_scan_result_service_uuids(
-            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_uuids,
+        char **service_ids = nullptr;
+        int service_count = 0;
+        ret = bt_adapter_le_get_scan_result_service_uuids(
+            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_ids,
             &service_count);
-        if (ble_tizen->last_error_ == BT_ERROR_NONE) {
+        if (ret == BT_ERROR_NONE) {
           for (int i = 0; i < service_count; ++i) {
-            device_scan_info->service_uuids.emplace_back(
-                std::string(service_uuids[i]));
-            free(service_uuids[i]);
+            scan_info->service_ids.emplace_back(std::string(service_ids[i]));
+            free(service_ids[i]);
           }
-          free(service_uuids);
-        } else if (ble_tizen->last_error_ == BT_ERROR_NO_DATA) {
-          // Leave the service uuid list empty.
+          free(service_ids);
+        } else if (ret == BT_ERROR_NO_DATA) {
+          LOG_INFO("Could not obtain service UUIDs from the device %s.",
+                   info->remote_address);
         } else {
+          self->last_error_ = ret;
           return;
         }
 
-        bt_adapter_le_service_data_s *service_data;
-        int service_data_count;
-        // Get service data.
-        ble_tizen->last_error_ =
-            bt_adapter_le_get_scan_result_service_data_list(
-                info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_data,
-                &service_data_count);
-        if (ble_tizen->last_error_ == BT_ERROR_NONE) {
+        bt_adapter_le_service_data_s *service_data = nullptr;
+        int service_data_count = 0;
+        ret = bt_adapter_le_get_scan_result_service_data_list(
+            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_data,
+            &service_data_count);
+        if (ret == BT_ERROR_NONE) {
           for (int i = 0; i < service_data_count; ++i) {
-            ServiceDataEntry service_data_entry;
-            service_data_entry.service_id = service_data[i].service_uuid;
-            service_data_entry.data =
+            ServiceDataEntry entry = {};
+            entry.service_id = service_data[i].service_uuid;
+            entry.data =
                 std::vector<uint8_t>(service_data[i].service_data,
                                      service_data[i].service_data +
                                          service_data[i].service_data_len);
-            device_scan_info->service_data.emplace_back(service_data_entry);
+            scan_info->service_data.emplace_back(entry);
           }
           bt_adapter_le_free_service_data_list(service_data,
                                                service_data_count);
 
-        } else if (ble_tizen->last_error_ == BT_ERROR_NO_DATA) {
-          // Leave the service data list empty.
+        } else if (ret == BT_ERROR_NO_DATA) {
+          LOG_INFO("Could not obtain the service data from the device %s.",
+                   info->remote_address);
         } else {
+          self->last_error_ = ret;
           return;
         }
 
-        device_scan_info->rssi = info->rssi;
-
-        if (ble_tizen->device_scan_callback_) {
-          ble_tizen->device_scan_callback_(std::move(device_scan_info));
+        if (self->device_scan_callback_) {
+          self->device_scan_callback_(std::move(scan_info));
         }
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  scanning_ = true;
+
+  is_scanning_ = true;
   return true;
 }
 
 bool BleTizen::StopScan() {
-  if (!scanning_) {
+  if (!is_scanning_) {
     return true;
   }
   last_error_ = bt_adapter_le_stop_scan();
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  last_error_ = FilterImpl::UnregisterAll();
-  if (last_error_ != BT_ERROR_NONE) {
-    return false;
-  }
+  ScanFilter::UnregisterAll();
   filters_.clear();
 
-  scanning_ = false;
+  is_scanning_ = false;
   return true;
 }
 
-bool BleTizen::ConnectToDevice(const std::string &device_address) {
-  last_error_ = bt_gatt_connect(device_address.c_str(), false);
+bool BleTizen::ConnectToDevice(const std::string &device_id) {
+  last_error_ = bt_gatt_connect(device_id.c_str(), false);
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
   if (connection_state_changed_callback_) {
-    connection_state_changed_callback_(device_address,
-                                       ConnectionState::kConnecting);
+    connection_state_changed_callback_(device_id, ConnectionState::kConnecting);
   }
   return true;
 }
 
-bool BleTizen::DisconnectFromDevice(const std::string &device_address) {
-  last_error_ = bt_gatt_disconnect(device_address.c_str());
+bool BleTizen::DisconnectFromDevice(const std::string &device_id) {
+  last_error_ = bt_gatt_disconnect(device_id.c_str());
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
   if (connection_state_changed_callback_) {
-    connection_state_changed_callback_(device_address,
+    connection_state_changed_callback_(device_id,
                                        ConnectionState::kDisconnecting);
   }
   return true;
@@ -346,10 +284,9 @@ bool BleTizen::SetConnectionStateChangedCallback(
   last_error_ = bt_gatt_set_connection_state_changed_cb(
       [](int result, bool connected, const char *remote_address,
          void *user_data) {
-        BleTizen *ble_tizen = static_cast<BleTizen *>(user_data);
-
-        if (ble_tizen->connection_state_changed_callback_) {
-          ble_tizen->connection_state_changed_callback_(
+        BleTizen *self = static_cast<BleTizen *>(user_data);
+        if (self->connection_state_changed_callback_) {
+          self->connection_state_changed_callback_(
               remote_address, connected ? ConnectionState::kConnected
                                         : ConnectionState::kDisconnected);
         }
@@ -377,16 +314,16 @@ bool BleTizen::ReadCharacteristics(
       native_handles_.try_emplace(characteristic, characteristic);
   if (inserted) {
     LOG_DEBUG("A new characteristic info was inserted: [%s %s %s].",
-              characteristic.device_address().c_str(),
-              characteristic.service_uuid().c_str(),
-              characteristic.characteristic_uuid().c_str());
+              characteristic.device_id().c_str(),
+              characteristic.service_id().c_str(),
+              characteristic.characteristic_id().c_str());
   } else {
     LOG_DEBUG("Using exising characteristic info: [%s %s %s].",
-              characteristic.device_address().c_str(),
-              characteristic.service_uuid().c_str(),
-              characteristic.characteristic_uuid().c_str());
+              characteristic.device_id().c_str(),
+              characteristic.service_id().c_str(),
+              characteristic.characteristic_id().c_str());
   }
-  NativeCharacteristicHandle *native_handle = &it->second;
+  CharacteristicHandle *native_handle = &it->second;
   if (!native_handle->IsReadable()) {
     LOG_ERROR("The characteristic is not readable.");
     last_error_ = BT_ERROR_NOT_SUPPORTED;
@@ -394,7 +331,7 @@ bool BleTizen::ReadCharacteristics(
   }
   native_handle->SetValueReadCallback(
       [this](QualifiedCharacteristic characteristic,
-             std::vector<uint8_t> data) {
+             const std::vector<uint8_t> &data) {
         if (notification_callback_) {
           notification_callback_(characteristic, data);
         }
@@ -410,8 +347,8 @@ bool BleTizen::ReadCharacteristics(
                     get_error_message(result));
           return;
         }
-        NativeCharacteristicHandle *native_handle =
-            static_cast<NativeCharacteristicHandle *>(user_data);
+        CharacteristicHandle *native_handle =
+            static_cast<CharacteristicHandle *>(user_data);
         char *value;
         int length;
         bt_gatt_get_value(request_handle, &value, &length);
@@ -433,7 +370,7 @@ bool BleTizen::WriteCharacteristics(
     const std::vector<uint8_t> &value,
     CharacteristicValueWriteCallback callback) {
   auto [it, _] = native_handles_.try_emplace(characteristic, characteristic);
-  NativeCharacteristicHandle *native_handle = &it->second;
+  CharacteristicHandle *native_handle = &it->second;
   last_error_ = bt_gatt_set_value(native_handle->characteristic_handle(),
                                   reinterpret_cast<const char *>(value.data()),
                                   static_cast<int>(value.size()));
@@ -449,8 +386,8 @@ bool BleTizen::WriteCharacteristics(
         if (result != BT_ERROR_NONE) {
           // TODO: Add error callbacks.
         }
-        NativeCharacteristicHandle *native_handle =
-            static_cast<NativeCharacteristicHandle *>(user_data);
+        CharacteristicHandle *native_handle =
+            static_cast<CharacteristicHandle *>(user_data);
         native_handle->NotifyValueWrote();
         native_handle->SetValueWroteCallback(nullptr);
       },
@@ -465,10 +402,10 @@ bool BleTizen::WriteCharacteristics(
 bool BleTizen::ListenNotifications(
     const QualifiedCharacteristic &characteristic) {
   auto [it, _] = native_handles_.try_emplace(characteristic, characteristic);
-  NativeCharacteristicHandle *native_handle = &it->second;
+  CharacteristicHandle *native_handle = &it->second;
   native_handle->SetValueChangedCallback(
       [this](QualifiedCharacteristic characteristic,
-             std::vector<uint8_t> data) {
+             const std::vector<uint8_t> &data) {
         if (notification_callback_) {
           notification_callback_(characteristic, data);
         }
@@ -478,8 +415,8 @@ bool BleTizen::ListenNotifications(
   last_error_ = bt_gatt_client_set_characteristic_value_changed_cb(
       native_handle->characteristic_handle(),
       [](bt_gatt_h characteristic, char *value, int len, void *user_data) {
-        NativeCharacteristicHandle *native_handle =
-            static_cast<NativeCharacteristicHandle *>(user_data);
+        CharacteristicHandle *native_handle =
+            static_cast<CharacteristicHandle *>(user_data);
         std::vector<uint8_t> bytes(value, value + len);
         native_handle->NotifyValueChanged(bytes);
       },
@@ -497,7 +434,7 @@ bool BleTizen::StopNotifications(
   if (it == native_handles_.end()) {
     return true;
   }
-  NativeCharacteristicHandle *native_handle = &it->second;
+  CharacteristicHandle *native_handle = &it->second;
   last_error_ = bt_gatt_client_unset_characteristic_value_changed_cb(
       native_handle->characteristic_handle());
   if (last_error_ != BT_ERROR_NONE) {
@@ -508,11 +445,11 @@ bool BleTizen::StopNotifications(
 }
 
 std::optional<std::vector<DiscoveredService>> BleTizen::DiscoverServices(
-    const std::string &device_address) {
+    const std::string &device_id) {
   std::vector<DiscoveredService> discovered_services;
 
   bt_gatt_client_h device_handle;
-  last_error_ = bt_gatt_client_create(device_address.c_str(), &device_handle);
+  last_error_ = bt_gatt_client_create(device_id.c_str(), &device_handle);
   if (last_error_ != BT_ERROR_NONE) {
     return std::nullopt;
   }
@@ -521,7 +458,7 @@ std::optional<std::vector<DiscoveredService>> BleTizen::DiscoverServices(
       [](int total, int index, bt_gatt_h service_handle, void *user_data) {
         std::vector<DiscoveredService> *discovered_services =
             static_cast<std::vector<DiscoveredService> *>(user_data);
-        GetDiscoveredService(service_handle, discovered_services);
+        AddDiscoveredService(service_handle, discovered_services);
         return true;
       },
       &discovered_services);

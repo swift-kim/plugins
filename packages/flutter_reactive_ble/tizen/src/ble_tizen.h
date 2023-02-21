@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "charcteristic_handles.h"
+#include "types.h"
 
 struct ServiceDataEntry {
   Uuid service_id;
@@ -19,7 +19,7 @@ struct ServiceDataEntry {
 };
 
 struct DeviceScanInfo {
-  std::string address;
+  std::string device_id;
 
   std::string name;
 
@@ -27,7 +27,7 @@ struct DeviceScanInfo {
 
   std::vector<uint8_t> manufacturer_data;
 
-  std::vector<Uuid> service_uuids;
+  std::vector<Uuid> service_ids;
 
   int32_t rssi;
 };
@@ -49,9 +49,9 @@ struct DiscoveredCharacteristic {
 
 struct DiscoveredService {
   Uuid service_id;
-  std::vector<Uuid> characteristic_uuids;
-  std::vector<DiscoveredService> included_services;
+  std::vector<Uuid> characteristic_ids;
   std::vector<DiscoveredCharacteristic> characteristics;
+  std::vector<DiscoveredService> included_services;
 };
 
 class ErrorReportMixin {
@@ -62,25 +62,6 @@ class ErrorReportMixin {
 
  protected:
   int error_code_;
-};
-
-// A class that holds and applys filtering information for scanning.
-class Filter {
- public:
-  virtual ~Filter() = default;
-
-  virtual bool Register() = 0;
-
-  virtual bool Unregister() = 0;
-
-  virtual const bt_scan_filter_h& handle() const = 0;
-
-  int GetLastError() { return last_error_; }
-
-  std::string GetLastErrorString() { return get_error_message(last_error_); }
-
- protected:
-  int last_error_;
 };
 
 enum class BleStatus {
@@ -102,12 +83,12 @@ typedef std::function<void(BleStatus)> BleStatusChangedCallback;
 typedef std::function<void(std::unique_ptr<DeviceScanInfo>)> DeviceScanCallback;
 
 // A ble connection state changed callback.
-typedef std::function<void(std::string device_address, ConnectionState)>
+typedef std::function<void(const std::string& device_id, ConnectionState)>
     ConnectionStateChangedCallback;
 
 class BleTizen {
  public:
-  ~BleTizen();
+  ~BleTizen() = default;
 
   // Initializes the bluetooth low enery module.
   bool Initialize();
@@ -122,20 +103,20 @@ class BleTizen {
   bool UnsetBleStatusChangedCallback();
 
   // Scans for surrounding devices.
-  bool Scan(const std::vector<Uuid>& service_filters);
+  bool Scan(const std::vector<Uuid>& service_ids);
 
   // Stops scanning for devices.
   bool StopScan();
 
   void SetDeviceScanCallback(DeviceScanCallback callback) {
-    device_scan_callback_ = callback;
+    device_scan_callback_ = std::move(callback);
   }
 
-  // Connects to device with |device_address|.
-  bool ConnectToDevice(const std::string& device_address);
+  // Connects to device with |device_id|.
+  bool ConnectToDevice(const std::string& device_id);
 
-  // Disconnects from device with |device_address|.
-  bool DisconnectFromDevice(const std::string& device_address);
+  // Disconnects from device with |device_id|.
+  bool DisconnectFromDevice(const std::string& device_id);
 
   bool SetConnectionStateChangedCallback(
       ConnectionStateChangedCallback callback);
@@ -143,45 +124,44 @@ class BleTizen {
   bool UnsetConnectionStateChangedCallback();
 
   // Reads value from characteristic.
-  bool ReadCharacteristics(const QualifiedCharacteristic& address);
+  bool ReadCharacteristics(const QualifiedCharacteristic& characteristic);
 
   // Writes value to characteristic.
-  bool WriteCharacteristics(const QualifiedCharacteristic& address,
+  bool WriteCharacteristics(const QualifiedCharacteristic& characteristic,
                             const std::vector<uint8_t>& value,
                             CharacteristicValueWriteCallback callback);
 
   // Listens for notification from characteristic.
-  bool ListenNotifications(const QualifiedCharacteristic& address);
+  bool ListenNotifications(const QualifiedCharacteristic& characteristic);
 
   // Stops listening for notifications from characteristic.
-  bool StopNotifications(const QualifiedCharacteristic& address);
+  bool StopNotifications(const QualifiedCharacteristic& characteristic);
 
   void SetNotificationCallback(CharacteristicValueChangedCallback callback) {
-    notification_callback_ = callback;
+    notification_callback_ = std::move(callback);
   }
 
   // Discovers services adverstised by the device.
   std::optional<std::vector<DiscoveredService>> DiscoverServices(
-      const std::string& device_address);
+      const std::string& device_id);
 
   int GetLastError() { return last_error_; }
 
   std::string GetLastErrorString() { return get_error_message(last_error_); }
 
  private:
-  bool scanning_ = false;
+  bool is_scanning_ = false;
 
   BleStatusChangedCallback ble_status_changed_callback_;
   DeviceScanCallback device_scan_callback_;
   ConnectionStateChangedCallback connection_state_changed_callback_;
+  CharacteristicValueChangedCallback notification_callback_;
 
-  std::unordered_map<QualifiedCharacteristic, NativeCharacteristicHandle,
+  std::unordered_map<QualifiedCharacteristic, CharacteristicHandle,
                      CharacteristicHasher>
       native_handles_;
 
-  CharacteristicValueChangedCallback notification_callback_;
-
-  std::vector<std::unique_ptr<Filter>> filters_;
+  std::vector<std::unique_ptr<ScanFilter>> filters_;
 
   int last_error_;
 };

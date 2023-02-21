@@ -78,7 +78,7 @@ bool GetValueFromEncodableMap(const flutter::EncodableMap *map, const char *key,
 flutter::EncodableValue ServiceToEncodableValue(
     const DiscoveredService &service) {
   flutter::EncodableList characteristic_ids;
-  for (const Uuid &characteristic_id : service.characteristic_uuids) {
+  for (const Uuid &characteristic_id : service.characteristic_ids) {
     characteristic_ids.push_back(flutter::EncodableValue(characteristic_id));
   }
   flutter::EncodableList included_services;
@@ -131,14 +131,14 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
     events_ = std::move(events);
     ble_tizen_->SetNotificationCallback(
         [this](QualifiedCharacteristic characteristic,
-               std::vector<uint8_t> data) {
+               const std::vector<uint8_t> &data) {
           flutter::EncodableMap characteristic_map = {
               {flutter::EncodableValue(kDeviceId),
-               flutter::EncodableValue(characteristic.device_address())},
+               flutter::EncodableValue(characteristic.device_id())},
               {flutter::EncodableValue(kServiceId),
-               flutter::EncodableValue(characteristic.service_uuid())},
+               flutter::EncodableValue(characteristic.service_id())},
               {flutter::EncodableValue(kCharacteristicId),
-               flutter::EncodableValue(characteristic.characteristic_uuid())},
+               flutter::EncodableValue(characteristic.characteristic_id())},
           };
           flutter::EncodableMap map = {
               {flutter::EncodableValue(kQualifiedCharacteristic),
@@ -174,8 +174,7 @@ class ConnectionUpdateStreamHandler : public FlStreamHandler {
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
     ble_tizen_->SetConnectionStateChangedCallback(
-        [this](const std::string &device_address,
-               ConnectionState connection_state) {
+        [this](const std::string &device_id, ConnectionState connection_state) {
           std::string state = "disconnected";
           if (connection_state == ConnectionState::kConnecting) {
             state = "connecting";
@@ -186,7 +185,7 @@ class ConnectionUpdateStreamHandler : public FlStreamHandler {
           }
           flutter::EncodableMap map = {
               {flutter::EncodableValue(kDeviceId),
-               flutter::EncodableValue(device_address)},
+               flutter::EncodableValue(device_id)},
               {flutter::EncodableValue(kConnectionState),
                flutter::EncodableValue(state)},
           };
@@ -224,12 +223,12 @@ class BleScanStreamHandler : public FlStreamHandler {
                 flutter::EncodableValue(entry.data);
           }
           flutter::EncodableList service_ids;
-          for (const Uuid &service_id : device_scan_info->service_uuids) {
+          for (const Uuid &service_id : device_scan_info->service_ids) {
             service_ids.push_back(flutter::EncodableValue(service_id));
           }
           flutter::EncodableMap discovered_device = {
               {flutter::EncodableValue(kDeviceId),
-               flutter::EncodableValue(device_scan_info->address)},
+               flutter::EncodableValue(device_scan_info->device_id)},
               {flutter::EncodableValue(kDeviceName),
                flutter::EncodableValue(device_scan_info->name)},
               {flutter::EncodableValue(kServiceData),
