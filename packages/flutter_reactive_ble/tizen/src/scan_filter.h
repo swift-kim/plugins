@@ -15,11 +15,11 @@ typedef std::string Uuid;
 class ScanFilter {
  public:
   explicit ScanFilter(const Uuid &service_id);
-  virtual ~ScanFilter();
+  ~ScanFilter();
 
   // Prevent copying.
-  ScanFilter(const ScanFilter &handle) = delete;
-  ScanFilter &operator=(const ScanFilter &handle) = delete;
+  ScanFilter(ScanFilter const &) = delete;
+  ScanFilter &operator=(ScanFilter const &) = delete;
 
   ScanFilter(ScanFilter &&other) : handle_(other.handle_) {}
   ScanFilter &operator=(ScanFilter &&other) {

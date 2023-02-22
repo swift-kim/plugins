@@ -8,6 +8,7 @@
 #include <bluetooth_type.h>
 
 #include <string>
+#include <unordered_map>
 
 typedef std::string Uuid;
 
@@ -16,12 +17,11 @@ class QualifiedCharacteristic {
   explicit QualifiedCharacteristic(const std::string &device_id,
                                    const Uuid &service_id,
                                    const Uuid &characteristic_id);
-  virtual ~QualifiedCharacteristic();
+  ~QualifiedCharacteristic();
 
   // Prevent copying.
-  QualifiedCharacteristic(const QualifiedCharacteristic &handle) = delete;
-  QualifiedCharacteristic &operator=(const QualifiedCharacteristic &handle) =
-      delete;
+  QualifiedCharacteristic(QualifiedCharacteristic const &) = delete;
+  QualifiedCharacteristic &operator=(QualifiedCharacteristic const &) = delete;
 
   bool IsReadable() const;
 
@@ -31,16 +31,20 @@ class QualifiedCharacteristic {
 
   Uuid characteristic_id() const { return characteristic_id_; }
 
-  bt_gatt_h handle() const { return characteristic_; }
+  bt_gatt_h handle() const { return handle_; }
 
  private:
   std::string device_id_;
   Uuid service_id_;
   Uuid characteristic_id_;
 
-  bt_gatt_client_h device_ = nullptr;
-  bt_gatt_h service_ = nullptr;
-  bt_gatt_h characteristic_ = nullptr;
+  // TODO(swift-kim): Avoid manual reference counting.
+  static inline std::unordered_map<std::string, bt_gatt_client_h>
+      device_handles_;
+  static inline std::unordered_map<std::string, int32_t>
+      device_reference_counts_;
+
+  bt_gatt_h handle_ = nullptr;
 };
 
 #endif  // FLUTTER_PLUGIN_QUALIFIED_CHARACTERISTIC_H_

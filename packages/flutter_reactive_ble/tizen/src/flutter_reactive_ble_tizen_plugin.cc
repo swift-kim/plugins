@@ -507,6 +507,10 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       characteristic = ble_tizen_->RegisterCharacteristic(device_id, service_id,
                                                           characteristic_id);
     }
+    if (!characteristic) {
+      result->Error("Internal error", "Failed to register the characteristic.");
+      return;
+    }
 
     if (method_name == "subscribeToNotifications") {
       if (!ble_tizen_->ListenNotifications(*characteristic)) {

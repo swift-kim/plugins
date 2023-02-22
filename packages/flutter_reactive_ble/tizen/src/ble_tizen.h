@@ -145,6 +145,9 @@ class BleTizen {
       const Uuid& characteristic_id) {
     auto instance = std::make_shared<QualifiedCharacteristic>(
         device_id, service_id, characteristic_id);
+    if (!instance->handle()) {
+      return nullptr;
+    }
     return characteristics_.emplace_back(std::move(instance));
   }
 
