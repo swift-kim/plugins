@@ -149,13 +149,16 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
                flutter::EncodableValue(flutter::EncodableValue(data))},
           };
           events_->Success(flutter::EncodableValue(map));
+        },
+        [this](int error_code, const std::string &error_message) {
+          events_->Error(std::to_string(error_code), error_message);
         });
     return nullptr;
   }
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    ble_tizen_->SetNotificationCallback(nullptr);
+    ble_tizen_->SetNotificationCallback(nullptr, nullptr);
     events_.reset();
     return nullptr;
   }
@@ -175,7 +178,7 @@ class ConnectionUpdateStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    ble_tizen_->SetConnectionStateChangedCallback(
+    ble_tizen_->SetConnectionStateChangeCallback(
         [this](const std::string &device_id, ConnectionState state) {
           std::string connection_state = "disconnected";
           if (state == ConnectionState::kConnecting) {
@@ -192,13 +195,16 @@ class ConnectionUpdateStreamHandler : public FlStreamHandler {
                flutter::EncodableValue(connection_state)},
           };
           events_->Success(flutter::EncodableValue(map));
+        },
+        [this](int error_code, const std::string &error_message) {
+          events_->Error(std::to_string(error_code), error_message);
         });
     return nullptr;
   }
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    ble_tizen_->UnsetConnectionStateChangedCallback();
+    ble_tizen_->UnsetConnectionStateChangeCallback();
     events_.reset();
     return nullptr;
   }
@@ -217,38 +223,42 @@ class BleScanStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    ble_tizen_->SetDeviceScanCallback([this](const DiscoveredDevice &device) {
-      flutter::EncodableList service_ids;
-      for (const Uuid &service_id : device.service_ids) {
-        service_ids.emplace_back(flutter::EncodableValue(service_id));
-      }
-      flutter::EncodableMap service_data;
-      for (const auto &[service_id, data] : device.service_data) {
-        service_data[flutter::EncodableValue(service_id)] =
-            flutter::EncodableValue(data);
-      }
-      flutter::EncodableMap map = {
-          {flutter::EncodableValue(kDeviceId),
-           flutter::EncodableValue(device.device_id)},
-          {flutter::EncodableValue(kDeviceName),
-           flutter::EncodableValue(device.name)},
-          {flutter::EncodableValue(kManufacturerData),
-           flutter::EncodableValue(device.manufacturer_data)},
-          {flutter::EncodableValue(kServiceIds),
-           flutter::EncodableValue(service_ids)},
-          {flutter::EncodableValue(kServiceData),
-           flutter::EncodableValue(service_data)},
-          {flutter::EncodableValue(kRssi),
-           flutter::EncodableValue(device.rssi)},
-      };
-      events_->Success(flutter::EncodableValue(map));
-    });
+    ble_tizen_->SetDeviceScanCallback(
+        [this](const DiscoveredDevice &device) {
+          flutter::EncodableList service_ids;
+          for (const Uuid &service_id : device.service_ids) {
+            service_ids.emplace_back(flutter::EncodableValue(service_id));
+          }
+          flutter::EncodableMap service_data;
+          for (const auto &[service_id, data] : device.service_data) {
+            service_data[flutter::EncodableValue(service_id)] =
+                flutter::EncodableValue(data);
+          }
+          flutter::EncodableMap map = {
+              {flutter::EncodableValue(kDeviceId),
+               flutter::EncodableValue(device.device_id)},
+              {flutter::EncodableValue(kDeviceName),
+               flutter::EncodableValue(device.name)},
+              {flutter::EncodableValue(kManufacturerData),
+               flutter::EncodableValue(device.manufacturer_data)},
+              {flutter::EncodableValue(kServiceIds),
+               flutter::EncodableValue(service_ids)},
+              {flutter::EncodableValue(kServiceData),
+               flutter::EncodableValue(service_data)},
+              {flutter::EncodableValue(kRssi),
+               flutter::EncodableValue(device.rssi)},
+          };
+          events_->Success(flutter::EncodableValue(map));
+        },
+        [this](int error_code, const std::string &error_message) {
+          events_->Error(std::to_string(error_code), error_message);
+        });
     return nullptr;
   }
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    ble_tizen_->SetDeviceScanCallback(nullptr);
+    ble_tizen_->SetDeviceScanCallback(nullptr, nullptr);
     ble_tizen_->StopScan();
     events_.reset();
     return nullptr;
@@ -281,7 +291,7 @@ class BleStatusStreamHandler : public FlStreamHandler {
     }
     events_->Success(flutter::EncodableValue(ble_status));
 
-    ble_tizen_->SetBleStatusChangedCallback([this](BleStatus status) {
+    ble_tizen_->SetBleStatusChangeCallback([this](BleStatus status) {
       std::string ble_status =
           status == BleStatus::kEnabled ? "ready" : "poweredOff";
       events_->Success(flutter::EncodableValue(ble_status));
@@ -291,7 +301,7 @@ class BleStatusStreamHandler : public FlStreamHandler {
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    ble_tizen_->UnsetBleStatusChangedCallback();
+    ble_tizen_->UnsetBleStatusChangeCallback();
     events_.reset();
     return nullptr;
   }

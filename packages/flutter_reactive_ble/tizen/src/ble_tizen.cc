@@ -102,30 +102,36 @@ BleStatus BleTizen::GetBleStatus() {
   return BleStatus::kUnknown;
 }
 
-bool BleTizen::SetBleStatusChangedCallback(BleStatusChangedCallback callback) {
+bool BleTizen::SetBleStatusChangeCallback(BleStatusChangeCallback callback) {
   last_error_ = bt_adapter_set_state_changed_cb(
       [](int result, bt_adapter_state_e adapter_state, void *user_data) {
+        if (result != BT_ERROR_NONE) {
+          LOG_ERROR("The operation failed unexpectedly: %s",
+                    get_error_message(result));
+          return;
+        }
         BleTizen *self = static_cast<BleTizen *>(user_data);
-        if (self->ble_status_changed_callback_) {
-          self->ble_status_changed_callback_(adapter_state == BT_ADAPTER_ENABLED
-                                                 ? BleStatus::kEnabled
-                                                 : BleStatus::kDisabled);
+        if (self->ble_status_change_callback_) {
+          BleStatus status = adapter_state == BT_ADAPTER_ENABLED
+                                 ? BleStatus::kEnabled
+                                 : BleStatus::kDisabled;
+          self->ble_status_change_callback_(status);
         }
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  ble_status_changed_callback_ = std::move(callback);
+  ble_status_change_callback_ = std::move(callback);
   return true;
 }
 
-bool BleTizen::UnsetBleStatusChangedCallback() {
+bool BleTizen::UnsetBleStatusChangeCallback() {
   last_error_ = bt_adapter_unset_state_changed_cb();
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  ble_status_changed_callback_ = nullptr;
+  ble_status_change_callback_ = nullptr;
   return true;
 }
 
@@ -147,14 +153,20 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
   last_error_ = bt_adapter_le_start_scan(
       [](int result, bt_adapter_le_device_scan_result_info_s *info,
          void *user_data) {
+        BleTizen *self = static_cast<BleTizen *>(user_data);
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The scan operation resulted in an error: %s",
                     get_error_message(result));
+          if (self->device_scan_error_callback_) {
+            self->device_scan_error_callback_(result,
+                                              get_error_message(result));
+          }
           return;
         }
 
         DiscoveredDevice device = {};
         device.device_id = std::string(info->remote_address);
+        device.rssi = info->rssi;
 
         char *name = nullptr;
         int ret = bt_adapter_le_get_scan_result_device_name(
@@ -243,9 +255,6 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
           return;
         }
 
-        device.rssi = info->rssi;
-
-        BleTizen *self = static_cast<BleTizen *>(user_data);
         if (self->device_scan_callback_) {
           self->device_scan_callback_(device);
         }
@@ -280,8 +289,8 @@ bool BleTizen::ConnectToDevice(const std::string &device_id) {
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  if (connection_state_changed_callback_) {
-    connection_state_changed_callback_(device_id, ConnectionState::kConnecting);
+  if (connection_state_change_callback_) {
+    connection_state_change_callback_(device_id, ConnectionState::kConnecting);
   }
   return true;
 }
@@ -291,39 +300,50 @@ bool BleTizen::DisconnectFromDevice(const std::string &device_id) {
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  if (connection_state_changed_callback_) {
-    connection_state_changed_callback_(device_id,
-                                       ConnectionState::kDisconnecting);
+  if (connection_state_change_callback_) {
+    connection_state_change_callback_(device_id,
+                                      ConnectionState::kDisconnecting);
   }
   return true;
 }
 
-bool BleTizen::SetConnectionStateChangedCallback(
-    ConnectionStateChangedCallback callback) {
+bool BleTizen::SetConnectionStateChangeCallback(
+    ConnectionStateChangeCallback on_change, ErrorCallback on_error) {
   last_error_ = bt_gatt_set_connection_state_changed_cb(
       [](int result, bool connected, const char *remote_address,
          void *user_data) {
         BleTizen *self = static_cast<BleTizen *>(user_data);
-        if (self->connection_state_changed_callback_) {
-          self->connection_state_changed_callback_(
-              remote_address, connected ? ConnectionState::kConnected
-                                        : ConnectionState::kDisconnected);
+        if (result != BT_ERROR_NONE && result != BT_ERROR_ALREADY_DONE) {
+          LOG_ERROR("The connection request failed: %s",
+                    get_error_message(result));
+          if (self->connection_error_callback_) {
+            self->connection_error_callback_(result, get_error_message(result));
+          }
+        } else {
+          std::string device_id = std::string(remote_address);
+          ConnectionState state = connected ? ConnectionState::kConnected
+                                            : ConnectionState::kDisconnected;
+          if (self->connection_state_change_callback_) {
+            self->connection_state_change_callback_(device_id, state);
+          }
         }
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  connection_state_changed_callback_ = std::move(callback);
+  connection_state_change_callback_ = std::move(on_change);
+  connection_error_callback_ = std::move(on_error);
   return true;
 }
 
-bool BleTizen::UnsetConnectionStateChangedCallback() {
+bool BleTizen::UnsetConnectionStateChangeCallback() {
   last_error_ = bt_gatt_unset_connection_state_changed_cb();
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  connection_state_changed_callback_ = nullptr;
+  connection_state_change_callback_ = nullptr;
+  connection_error_callback_ = nullptr;
   return true;
 }
 
@@ -360,16 +380,20 @@ bool BleTizen::ReadCharacteristic(
   last_error_ = bt_gatt_client_read_value(
       characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
+        BleTizen *self = static_cast<BleTizen *>(user_data);
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The read operation resulted in an error: %s",
                     get_error_message(result));
+          if (self->characteristic_read_error_callback_) {
+            self->characteristic_read_error_callback_(
+                result, get_error_message(result));
+          }
           return;
         }
 
-        BleTizen *self = static_cast<BleTizen *>(user_data);
         std::shared_ptr<QualifiedCharacteristic> characteristic =
             self->FindCharacteristic(request_handle);
-        if (self->notification_callback_ && characteristic) {
+        if (self->characteristic_read_callback_ && characteristic) {
           char *value = nullptr;
           int length = 0;
           int ret = bt_gatt_get_value(request_handle, &value, &length);
@@ -380,7 +404,7 @@ bool BleTizen::ReadCharacteristic(
           std::vector<uint8_t> bytes(value, value + length);
           free(value);
 
-          self->notification_callback_(*characteristic, bytes);
+          self->characteristic_read_callback_(*characteristic, bytes);
         }
       },
       this);
@@ -392,7 +416,8 @@ bool BleTizen::ReadCharacteristic(
 
 bool BleTizen::WriteCharacteristic(
     const QualifiedCharacteristic &characteristic,
-    const std::vector<uint8_t> &value, CharacteristicWriteCallback callback) {
+    const std::vector<uint8_t> &value, CharacteristicWriteCallback on_write,
+    ErrorCallback on_error) {
   last_error_ = bt_gatt_set_value(characteristic.handle(),
                                   reinterpret_cast<const char *>(value.data()),
                                   static_cast<int>(value.size()));
@@ -405,23 +430,29 @@ bool BleTizen::WriteCharacteristic(
     last_error_ = TIZEN_ERROR_ALREADY_IN_PROGRESS;
     return false;
   }
-  characteristic_write_callback_ = std::move(callback);
+  characteristic_write_callback_ = std::move(on_write);
+  characteristic_write_error_callback_ = std::move(on_error);
 
   last_error_ = bt_gatt_client_write_value(
       characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
+        BleTizen *self = static_cast<BleTizen *>(user_data);
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The write operation resulted in an error: %s",
                     get_error_message(result));
-          return;
+          if (self->characteristic_write_error_callback_) {
+            self->characteristic_write_error_callback_(
+                result, get_error_message(result));
+          }
+        } else {
+          std::shared_ptr<QualifiedCharacteristic> characteristic =
+              self->FindCharacteristic(request_handle);
+          if (self->characteristic_write_callback_ && characteristic) {
+            self->characteristic_write_callback_(*characteristic);
+          }
         }
-
-        BleTizen *self = static_cast<BleTizen *>(user_data);
-        std::shared_ptr<QualifiedCharacteristic> characteristic =
-            self->FindCharacteristic(request_handle);
-        if (self->characteristic_write_callback_ && characteristic) {
-          self->characteristic_write_callback_(*characteristic);
-        }
+        self->characteristic_write_callback_ = nullptr;
+        self->characteristic_write_error_callback_ = nullptr;
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
@@ -438,9 +469,9 @@ bool BleTizen::ListenNotifications(
         BleTizen *self = static_cast<BleTizen *>(user_data);
         std::shared_ptr<QualifiedCharacteristic> characteristic =
             self->FindCharacteristic(handle);
-        if (self->notification_callback_ && characteristic) {
+        if (self->characteristic_read_callback_ && characteristic) {
           std::vector<uint8_t> bytes(value, value + len);
-          self->notification_callback_(*characteristic, bytes);
+          self->characteristic_read_callback_(*characteristic, bytes);
         }
       },
       this);

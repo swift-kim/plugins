@@ -58,19 +58,22 @@ enum class ConnectionState {
   kDisconnected,
 };
 
-typedef std::function<void(BleStatus status)> BleStatusChangedCallback;
+typedef std::function<void(BleStatus status)> BleStatusChangeCallback;
 
 typedef std::function<void(const DiscoveredDevice& device)> DeviceScanCallback;
 
 typedef std::function<void(const std::string& device_id, ConnectionState state)>
-    ConnectionStateChangedCallback;
+    ConnectionStateChangeCallback;
 
 typedef std::function<void(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& bytes)>
-    CharacteristicUpdateCallback;
+    CharacteristicReadCallback;
 
 typedef std::function<void(const QualifiedCharacteristic& characteristic)>
     CharacteristicWriteCallback;
+
+typedef std::function<void(int error_code, const std::string& error_message)>
+    ErrorCallback;
 
 class BleTizen {
  public:
@@ -85,9 +88,9 @@ class BleTizen {
 
   BleStatus GetBleStatus();
 
-  bool SetBleStatusChangedCallback(BleStatusChangedCallback callback);
+  bool SetBleStatusChangeCallback(BleStatusChangeCallback callback);
 
-  bool UnsetBleStatusChangedCallback();
+  bool UnsetBleStatusChangeCallback();
 
   // Starts scanning for devices with optional |service_ids|.
   bool Scan(const std::vector<Uuid>& service_ids);
@@ -95,8 +98,10 @@ class BleTizen {
   // Stops scanning for devices.
   bool StopScan();
 
-  void SetDeviceScanCallback(DeviceScanCallback callback) {
-    device_scan_callback_ = std::move(callback);
+  void SetDeviceScanCallback(DeviceScanCallback on_complete,
+                             ErrorCallback on_error) {
+    device_scan_callback_ = std::move(on_complete);
+    device_scan_error_callback_ = std::move(on_error);
   }
 
   // Connects to a device identified by |device_id|.
@@ -105,10 +110,10 @@ class BleTizen {
   // Disconnects from the device.
   bool DisconnectFromDevice(const std::string& device_id);
 
-  bool SetConnectionStateChangedCallback(
-      ConnectionStateChangedCallback callback);
+  bool SetConnectionStateChangeCallback(ConnectionStateChangeCallback on_change,
+                                        ErrorCallback on_error);
 
-  bool UnsetConnectionStateChangedCallback();
+  bool UnsetConnectionStateChangeCallback();
 
   // Discovers services adverstised by the device.
   std::optional<std::vector<DiscoveredService>> DiscoverServices(
@@ -120,7 +125,8 @@ class BleTizen {
   // Writes a value to the specified characteristic.
   bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& value,
-                           CharacteristicWriteCallback callback);
+                           CharacteristicWriteCallback on_write,
+                           ErrorCallback on_error);
 
   // Subscribes to updates from the specified characteristic.
   bool ListenNotifications(const QualifiedCharacteristic& characteristic);
@@ -128,8 +134,10 @@ class BleTizen {
   // Unsubscribes from the characteristic.
   bool StopNotifications(const QualifiedCharacteristic& characteristic);
 
-  void SetNotificationCallback(CharacteristicUpdateCallback callback) {
-    notification_callback_ = std::move(callback);
+  void SetNotificationCallback(CharacteristicReadCallback on_update,
+                               ErrorCallback on_error) {
+    characteristic_read_callback_ = std::move(on_update);
+    characteristic_read_error_callback_ = std::move(on_error);
   }
 
   std::shared_ptr<QualifiedCharacteristic> RegisterCharacteristic(
@@ -181,16 +189,20 @@ class BleTizen {
 
   bool is_scanning_ = false;
 
-  BleStatusChangedCallback ble_status_changed_callback_;
+  BleStatusChangeCallback ble_status_change_callback_;
   DeviceScanCallback device_scan_callback_;
-  ConnectionStateChangedCallback connection_state_changed_callback_;
-  CharacteristicUpdateCallback notification_callback_;
+  ErrorCallback device_scan_error_callback_;
+  ConnectionStateChangeCallback connection_state_change_callback_;
+  ErrorCallback connection_error_callback_;
+  CharacteristicReadCallback characteristic_read_callback_;
+  ErrorCallback characteristic_read_error_callback_;
   CharacteristicWriteCallback characteristic_write_callback_;
+  ErrorCallback characteristic_write_error_callback_;
 
   std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
   std::vector<std::unique_ptr<ScanFilter>> filters_;
 
-  int last_error_;
+  int last_error_ = BT_ERROR_NONE;
 };
 
 #endif  // FLUTTER_PLUGIN_BLE_TIZEN_H_

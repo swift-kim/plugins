@@ -76,6 +76,7 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
     Map<Uuid, List<Uuid>>? servicesWithCharacteristicsToDiscover,
     Duration? connectionTimeout,
   ) {
+    // TODO(swift-kim): Support the connectionTimeout parameter.
     return methodChannel.invokeMethod<void>(
       'connectToDevice',
       <String, Object>{kDeviceId: id},
