@@ -8,20 +8,21 @@
 #include <bluetooth_type.h>
 
 #include <string>
-#include <unordered_map>
 
 typedef std::string Uuid;
 
+class BleDevice;
+
 class QualifiedCharacteristic {
  public:
-  explicit QualifiedCharacteristic(const std::string &device_id,
-                                   const Uuid &service_id,
-                                   const Uuid &characteristic_id);
-  ~QualifiedCharacteristic();
+  explicit QualifiedCharacteristic(const BleDevice* device,
+                                   const Uuid& service_id,
+                                   const Uuid& characteristic_id);
+  ~QualifiedCharacteristic() = default;
 
   // Prevent copying.
-  QualifiedCharacteristic(QualifiedCharacteristic const &) = delete;
-  QualifiedCharacteristic &operator=(QualifiedCharacteristic const &) = delete;
+  QualifiedCharacteristic(QualifiedCharacteristic const&) = delete;
+  QualifiedCharacteristic& operator=(QualifiedCharacteristic const&) = delete;
 
   bool IsReadable() const;
 
@@ -37,12 +38,6 @@ class QualifiedCharacteristic {
   std::string device_id_;
   Uuid service_id_;
   Uuid characteristic_id_;
-
-  // TODO(swift-kim): Avoid manual reference counting.
-  static inline std::unordered_map<std::string, bt_gatt_client_h>
-      device_handles_;
-  static inline std::unordered_map<std::string, int32_t>
-      device_reference_counts_;
 
   bt_gatt_h handle_ = nullptr;
 };

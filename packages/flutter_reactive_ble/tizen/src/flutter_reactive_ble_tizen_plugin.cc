@@ -131,7 +131,7 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    ble_tizen_->SetNotificationCallback(
+    ble_tizen_->SetNotificationCallbacks(
         [this](const QualifiedCharacteristic &characteristic,
                const std::vector<uint8_t> &data) {
           flutter::EncodableMap characteristic_map = {
@@ -158,7 +158,7 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    ble_tizen_->SetNotificationCallback(nullptr, nullptr);
+    ble_tizen_->SetNotificationCallbacks(nullptr, nullptr);
     events_.reset();
     return nullptr;
   }
@@ -450,18 +450,16 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       };
       result->Success();
     } else if (method_name == "discoverServices") {
-      std::optional<std::vector<DiscoveredService>> services =
-          ble_tizen_->DiscoverServices(device_id);
-      if (!services.has_value()) {
-        result->Error(std::to_string(ble_tizen_->GetLastError()),
-                      ble_tizen_->GetLastErrorString());
+      std::shared_ptr<BleDevice> device = ble_tizen_->FindDeviceById(device_id);
+      if (!device) {
+        result->Error("Operation failed", "Failed to register a device.");
         return;
       }
-      flutter::EncodableList service_list;
-      for (const DiscoveredService &service : services.value()) {
-        service_list.emplace_back(ServiceToEncodableValue(service));
+      flutter::EncodableList services;
+      for (const DiscoveredService &service : device->DiscoverServices()) {
+        services.emplace_back(ServiceToEncodableValue(service));
       }
-      result->Success(flutter::EncodableValue(service_list));
+      result->Success(flutter::EncodableValue(services));
     }
   }
 
@@ -500,29 +498,28 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       return;
     }
 
+    std::shared_ptr<BleDevice> device = ble_tizen_->FindDeviceById(device_id);
     std::shared_ptr<QualifiedCharacteristic> characteristic =
-        ble_tizen_->FindCharacteristicById(device_id, service_id,
-                                           characteristic_id);
+        device->FindCharacteristicById(service_id, characteristic_id);
     if (!characteristic) {
-      characteristic = ble_tizen_->RegisterCharacteristic(device_id, service_id,
-                                                          characteristic_id);
-    }
-    if (!characteristic) {
-      result->Error("Internal error", "Failed to register the characteristic.");
+      result->Error("Operation failed", "Failed to register a characteristic.");
       return;
     }
 
     if (method_name == "subscribeToNotifications") {
-      if (!ble_tizen_->ListenNotifications(*characteristic)) {
-        result->Error(std::to_string(ble_tizen_->GetLastError()),
-                      ble_tizen_->GetLastErrorString());
+      if (!device->ListenNotifications(*characteristic)) {
+        result->Error(std::to_string(device->GetLastError()),
+                      device->GetLastErrorString());
         return;
       }
+      device->SetNotificationCallbacks(
+          ble_tizen_->GetNotificationCallback(),
+          ble_tizen_->GetNotificationErrorCallback());
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
-      if (!ble_tizen_->StopNotifications(*characteristic)) {
-        result->Error(std::to_string(ble_tizen_->GetLastError()),
-                      ble_tizen_->GetLastErrorString());
+      if (!device->StopNotifications(*characteristic)) {
+        result->Error(std::to_string(device->GetLastError()),
+                      device->GetLastErrorString());
         return;
       }
       result->Success();
@@ -532,11 +529,14 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                       "Read operation not allowed on this characteristic.");
         return;
       }
-      if (!ble_tizen_->ReadCharacteristic(*characteristic)) {
-        result->Error(std::to_string(ble_tizen_->GetLastError()),
-                      ble_tizen_->GetLastErrorString());
+      if (!device->ReadCharacteristic(*characteristic)) {
+        result->Error(std::to_string(device->GetLastError()),
+                      device->GetLastErrorString());
         return;
       }
+      device->SetNotificationCallbacks(
+          ble_tizen_->GetNotificationCallback(),
+          ble_tizen_->GetNotificationErrorCallback());
       result->Success();
     } else if (method_name == "writeCharacteristicWithResponse") {
       // TODO
