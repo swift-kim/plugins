@@ -24,7 +24,15 @@ class QualifiedCharacteristic {
   QualifiedCharacteristic(QualifiedCharacteristic const&) = delete;
   QualifiedCharacteristic& operator=(QualifiedCharacteristic const&) = delete;
 
-  bool IsReadable() const;
+  bool IsReadable() const { return GetProperties() & BT_GATT_PROPERTY_READ; }
+
+  bool IsWritable() const { return GetProperties() & BT_GATT_PROPERTY_WRITE; }
+
+  bool IsWritableWithoutResponse() const {
+    return GetProperties() & BT_GATT_PROPERTY_WRITE_WITHOUT_RESPONSE;
+  }
+
+  void SetWriteType(bool no_response);
 
   std::string device_id() const { return device_id_; }
 
@@ -35,6 +43,8 @@ class QualifiedCharacteristic {
   bt_gatt_h handle() const { return handle_; }
 
  private:
+  int GetProperties() const;
+
   std::string device_id_;
   Uuid service_id_;
   Uuid characteristic_id_;

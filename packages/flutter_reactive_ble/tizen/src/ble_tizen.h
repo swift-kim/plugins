@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "ble_device.h"
-#include "qualified_characteristic.h"
 #include "scan_filter.h"
 
 struct DiscoveredDevice {
@@ -63,6 +62,7 @@ class BleTizen {
   // Cleans up the BLE module.
   bool Deinitialize();
 
+  // Returns the current BLE adapter status.
   BleStatus GetBleStatus();
 
   bool SetBleStatusChangeCallback(BleStatusChangeCallback callback);
@@ -91,20 +91,6 @@ class BleTizen {
                                         ErrorCallback on_error);
 
   bool UnsetConnectionStateChangeCallback();
-
-  void SetNotificationCallbacks(CharacteristicReadCallback on_read,
-                                ErrorCallback on_error) {
-    characteristic_read_callback_ = std::move(on_read);
-    characteristic_read_error_callback_ = std::move(on_error);
-  }
-
-  CharacteristicReadCallback GetNotificationCallback() {
-    return characteristic_read_callback_;
-  }
-
-  ErrorCallback GetNotificationErrorCallback() {
-    return characteristic_read_error_callback_;
-  }
 
   std::shared_ptr<BleDevice> FindDeviceById(const std::string& device_id) {
     auto iter = devices_.find(device_id);
@@ -135,9 +121,6 @@ class BleTizen {
   ErrorCallback device_scan_error_callback_;
   ConnectionStateChangeCallback connection_state_change_callback_;
   ErrorCallback connection_error_callback_;
-
-  CharacteristicReadCallback characteristic_read_callback_;
-  ErrorCallback characteristic_read_error_callback_;
 
   std::unordered_map<std::string, std::shared_ptr<BleDevice>> devices_;
   std::vector<ScanFilter> filters_;

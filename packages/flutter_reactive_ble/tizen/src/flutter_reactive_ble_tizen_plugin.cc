@@ -13,7 +13,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <variant>
@@ -35,27 +34,26 @@ typedef flutter::StreamHandlerError<flutter::EncodableValue>
 
 // String key constants for method call arguments and results.
 // Keep these in sync with those in `models.dart`.
-constexpr char kCharacteristicId[] = "characteristic_id";
-constexpr char kCharacteristicIds[] = "characteristic_ids";
-constexpr char kCharacteristics[] = "characteristics";
-constexpr char kConnectionState[] = "connection_state";
 constexpr char kDeviceId[] = "device_id";
 constexpr char kDeviceName[] = "device_name";
-constexpr char kIncludedServices[] = "included_services";
-constexpr char kIsIndicatable[] = "is_indicatable";
-constexpr char kIsNotifiable[] = "is_notifiable";
-constexpr char kIsReadable[] = "is_readable";
-constexpr char kIsWritableWithoutResponse[] = "is_writable_without_response";
-constexpr char kIsWritableWithResponse[] = "is_writable_with_response";
+constexpr char kServiceIds[] = "service_ids";
+constexpr char kServiceData[] = "service_data";
 constexpr char kManufacturerData[] = "manufacturer_data";
+constexpr char kRssi[] = "rssi";
+constexpr char kConnectionState[] = "connection_state";
+constexpr char kCharacteristicId[] = "characteristic_id";
+constexpr char kServiceId[] = "service_id";
+constexpr char kIsReadable[] = "is_readable";
+constexpr char kIsWritableWithResponse[] = "is_writable_with_response";
+constexpr char kIsWritableWithoutResponse[] = "is_writable_without_response";
+constexpr char kIsNotifiable[] = "is_notifiable";
+constexpr char kIsIndicatable[] = "is_indicatable";
+constexpr char kIncludedServices[] = "included_services";
+constexpr char kCharacteristicIds[] = "characteristic_ids";
+constexpr char kCharacteristics[] = "characteristics";
 constexpr char kQualifiedCharacteristic[] = "qualified_characteristic";
 constexpr char kResult[] = "result";
-constexpr char kRssi[] = "rssi";
-constexpr char kServiceData[] = "service_data";
-constexpr char kServiceId[] = "service_id";
-constexpr char kServiceIds[] = "service_ids";
 constexpr char kValue[] = "value";
-constexpr char kFailure[] = "failure";
 
 std::string MissingArgumentError(const char *name) {
   std::stringstream stream;
@@ -121,6 +119,10 @@ flutter::EncodableValue ServiceToEncodableValue(
   return flutter::EncodableValue(map);
 }
 
+// Callbacks shared by subscribeToNotifications and readCharacteristic.
+CharacteristicReadCallback characteristic_read_callback_;
+ErrorCallback characteristic_read_error_callback_;
+
 class BleCharUpdateStreamHandler : public FlStreamHandler {
  public:
   explicit BleCharUpdateStreamHandler(BleTizen *ble_tizen)
@@ -131,7 +133,7 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    ble_tizen_->SetNotificationCallbacks(
+    characteristic_read_callback_ =
         [this](const QualifiedCharacteristic &characteristic,
                const std::vector<uint8_t> &data) {
           flutter::EncodableMap characteristic_map = {
@@ -149,16 +151,18 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
                flutter::EncodableValue(flutter::EncodableValue(data))},
           };
           events_->Success(flutter::EncodableValue(map));
-        },
+        };
+    characteristic_read_error_callback_ =
         [this](int error_code, const std::string &error_message) {
           events_->Error(std::to_string(error_code), error_message);
-        });
+        };
     return nullptr;
   }
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    ble_tizen_->SetNotificationCallbacks(nullptr, nullptr);
+    characteristic_read_callback_ = nullptr;
+    characteristic_read_error_callback_ = nullptr;
     events_.reset();
     return nullptr;
   }
@@ -408,11 +412,11 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                method_name == "disconnectDevice" ||
                method_name == "discoverServices") {
       HandleDeviceOperation(method_call, std::move(result));
-    } else if (method_name == "subscribeToNotifications" ||
-               method_name == "stopSubscribingToNotifications" ||
-               method_name == "readCharacteristic" ||
+    } else if (method_name == "readCharacteristic" ||
                method_name == "writeCharacteristicWithResponse" ||
-               method_name == "writeCharacteristicWithoutResponse") {
+               method_name == "writeCharacteristicWithoutResponse" ||
+               method_name == "subscribeToNotifications" ||
+               method_name == "stopSubscribingToNotifications") {
       HandleCharacteristicOperation(method_call, std::move(result));
     } else {
       result->NotImplemented();
@@ -506,15 +510,73 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       return;
     }
 
-    if (method_name == "subscribeToNotifications") {
+    if (method_name == "readCharacteristic") {
+      if (!characteristic->IsReadable()) {
+        result->Error("Operation failed", "Not supported operation.");
+        return;
+      }
+      if (!device->ReadCharacteristic(*characteristic)) {
+        result->Error(std::to_string(device->GetLastError()),
+                      device->GetLastErrorString());
+        return;
+      }
+      device->SetNotificationCallbacks(characteristic_read_callback_,
+                                       characteristic_read_error_callback_);
+      result->Success();
+    } else if (method_name == "writeCharacteristicWithResponse" ||
+               method_name == "writeCharacteristicWithoutResponse") {
+      bool no_response = method_name == "writeCharacteristicWithoutResponse";
+      if ((no_response && !characteristic->IsWritableWithoutResponse()) ||
+          (!no_response && !characteristic->IsWritable())) {
+        result->Error("Operation failed", "Not supported operation.");
+        return;
+      }
+      characteristic->SetWriteType(no_response);
+
+      std::vector<uint8_t> value;
+      if (!GetValueFromEncodableMap(arguments, kValue, value)) {
+        result->Error("Invalid arguments", MissingArgumentError(kValue));
+        return;
+      }
+
+      FlMethodResult *result_ptr = result.release();
+      if (!device->WriteCharacteristic(
+              *characteristic, value,
+              [result =
+                   result_ptr](const QualifiedCharacteristic &characteristic) {
+                flutter::EncodableMap characteristic_map = {
+                    {flutter::EncodableValue(kDeviceId),
+                     flutter::EncodableValue(characteristic.device_id())},
+                    {flutter::EncodableValue(kServiceId),
+                     flutter::EncodableValue(characteristic.service_id())},
+                    {flutter::EncodableValue(kCharacteristicId),
+                     flutter::EncodableValue(
+                         characteristic.characteristic_id())},
+                };
+                flutter::EncodableMap map = {
+                    {flutter::EncodableValue(kQualifiedCharacteristic),
+                     flutter::EncodableValue(characteristic_map)},
+                };
+                result->Success(flutter::EncodableValue(map));
+                delete result;
+              },
+              [result = result_ptr](int error_code,
+                                    const std::string &error_message) {
+                result->Error(std::to_string(error_code), error_message);
+                delete result;
+              })) {
+        result->Error(std::to_string(device->GetLastError()),
+                      device->GetLastErrorString());
+        return;
+      }
+    } else if (method_name == "subscribeToNotifications") {
       if (!device->ListenNotifications(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());
         return;
       }
-      device->SetNotificationCallbacks(
-          ble_tizen_->GetNotificationCallback(),
-          ble_tizen_->GetNotificationErrorCallback());
+      device->SetNotificationCallbacks(characteristic_read_callback_,
+                                       characteristic_read_error_callback_);
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
       if (!device->StopNotifications(*characteristic)) {
@@ -523,27 +585,6 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         return;
       }
       result->Success();
-    } else if (method_name == "readCharacteristic") {
-      if (!characteristic->IsReadable()) {
-        result->Error("Operation failed",
-                      "Read operation not allowed on this characteristic.");
-        return;
-      }
-      if (!device->ReadCharacteristic(*characteristic)) {
-        result->Error(std::to_string(device->GetLastError()),
-                      device->GetLastErrorString());
-        return;
-      }
-      device->SetNotificationCallbacks(
-          ble_tizen_->GetNotificationCallback(),
-          ble_tizen_->GetNotificationErrorCallback());
-      result->Success();
-    } else if (method_name == "writeCharacteristicWithResponse") {
-      // TODO
-      result->NotImplemented();
-    } else if (method_name == "writeCharacteristicWithoutResponse") {
-      // TODO
-      result->NotImplemented();
     }
   }
 

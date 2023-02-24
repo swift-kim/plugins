@@ -5,38 +5,49 @@
 import 'package:flutter/services.dart';
 import 'package:reactive_ble_platform_interface/reactive_ble_platform_interface.dart';
 
-const String kCharacteristicId = 'characteristic_id';
-const String kCharacteristicIds = 'characteristic_ids';
-const String kCharacteristics = 'characteristics';
-const String kConnectionState = 'connection_state';
 const String kDeviceId = 'device_id';
 const String kDeviceName = 'device_name';
-const String kIncludedServices = 'included_services';
-const String kIsIndicatable = 'is_indicatable';
-const String kIsNotifiable = 'is_notifiable';
-const String kIsReadable = 'is_readable';
-const String kIsWritableWithoutResponse = 'is_writable_without_response';
-const String kIsWritableWithResponse = 'is_writable_with_response';
+const String kServiceIds = 'service_ids';
+const String kServiceData = 'service_data';
 const String kManufacturerData = 'manufacturer_data';
+const String kRssi = 'rssi';
+const String kConnectionState = 'connection_state';
+const String kCharacteristicId = 'characteristic_id';
+const String kServiceId = 'service_id';
+const String kIsReadable = 'is_readable';
+const String kIsWritableWithResponse = 'is_writable_with_response';
+const String kIsWritableWithoutResponse = 'is_writable_without_response';
+const String kIsNotifiable = 'is_notifiable';
+const String kIsIndicatable = 'is_indicatable';
+const String kIncludedServices = 'included_services';
+const String kCharacteristicIds = 'characteristic_ids';
+const String kCharacteristics = 'characteristics';
 const String kQualifiedCharacteristic = 'qualified_characteristic';
 const String kResult = 'result';
-const String kRssi = 'rssi';
-const String kServiceData = 'service_data';
-const String kServiceId = 'service_id';
-const String kServiceIds = 'service_ids';
 const String kValue = 'value';
-const String kFailure = 'failure';
 
-extension CharacteristicValueExtension on CharacteristicValue {
-  static CharacteristicValue fromMap(Map<String, Object> map) {
-    final characteristicMap =
-        (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
-    final valueList = (map[kResult] as List).cast<int>();
-    return CharacteristicValue(
-      characteristic:
-          QualifiedCharacteristicExtension.fromMap(characteristicMap),
-      result: Result.success(valueList),
+extension DiscoveredDeviceExtension on DiscoveredDevice {
+  static DiscoveredDevice fromMap(Map<String, Object> map) {
+    final serviceUuids =
+        (map[kServiceIds] as List).cast<String>().map(Uuid.parse).toList();
+    final serviceData = (map[kServiceData] as Map)
+        .cast<String, Uint8List>()
+        .map((String key, Uint8List value) => MapEntry(Uuid.parse(key), value));
+    return DiscoveredDevice(
+      id: map[kDeviceId] as String,
+      name: map[kDeviceName] as String? ?? '',
+      serviceData: serviceData,
+      manufacturerData: map[kManufacturerData] as Uint8List,
+      rssi: map[kRssi] as int,
+      serviceUuids: serviceUuids,
     );
+  }
+}
+
+extension ScanResultExtension on ScanResult {
+  static ScanResult fromMap(Map<String, Object> map) {
+    final discoveredDevice = DiscoveredDeviceExtension.fromMap(map);
+    return ScanResult(result: Result.success(discoveredDevice));
   }
 }
 
@@ -61,24 +72,6 @@ extension DiscoveredCharacteristicExtension on DiscoveredCharacteristic {
         isNotifiable: map[kIsNotifiable] as bool,
         isIndicatable: map[kIsIndicatable] as bool,
       );
-}
-
-extension DiscoveredDeviceExtension on DiscoveredDevice {
-  static DiscoveredDevice fromMap(Map<String, Object> map) {
-    final serviceData = (map[kServiceData] as Map)
-        .cast<String, Uint8List>()
-        .map((String key, Uint8List value) => MapEntry(Uuid.parse(key), value));
-    final serviceUuids =
-        (map[kServiceIds] as List).cast<String>().map(Uuid.parse).toList();
-    return DiscoveredDevice(
-      id: map[kDeviceId] as String,
-      name: map[kDeviceName] as String? ?? '',
-      serviceData: serviceData,
-      manufacturerData: map[kManufacturerData] as Uint8List,
-      rssi: map[kRssi] as int,
-      serviceUuids: serviceUuids,
-    );
-  }
 }
 
 extension DiscoveredServiceExtension on DiscoveredService {
@@ -119,10 +112,16 @@ extension QualifiedCharacteristicExtension on QualifiedCharacteristic {
       );
 }
 
-extension ScanResultExtension on ScanResult {
-  static ScanResult fromMap(Map<String, Object> map) {
-    final discoveredDevice = DiscoveredDeviceExtension.fromMap(map);
-    return ScanResult(result: Result.success(discoveredDevice));
+extension CharacteristicValueExtension on CharacteristicValue {
+  static CharacteristicValue fromMap(Map<String, Object> map) {
+    final characteristicMap =
+        (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
+    final valueList = (map[kResult] as List).cast<int>();
+    return CharacteristicValue(
+      characteristic:
+          QualifiedCharacteristicExtension.fromMap(characteristicMap),
+      result: Result.success(valueList),
+    );
   }
 }
 
@@ -130,24 +129,10 @@ extension WriteCharacteristicInfoExtension on WriteCharacteristicInfo {
   static WriteCharacteristicInfo fromMap(Map<String, Object> map) {
     final characteristicMap =
         (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
-    final resultMap = map[kResult] as Map;
-    final failure = resultMap[kFailure] as String?;
-
-    if (failure != null) {
-      return WriteCharacteristicInfo(
-        characteristic:
-            QualifiedCharacteristicExtension.fromMap(characteristicMap),
-        result: Result.failure(GenericFailure(
-          code: WriteCharacteristicFailure.unknown,
-          message: failure,
-        )),
-      );
-    } else {
-      return WriteCharacteristicInfo(
-        characteristic:
-            QualifiedCharacteristicExtension.fromMap(characteristicMap),
-        result: const Result.success(Unit()),
-      );
-    }
+    return WriteCharacteristicInfo(
+      characteristic:
+          QualifiedCharacteristicExtension.fromMap(characteristicMap),
+      result: const Result.success(Unit()),
+    );
   }
 }

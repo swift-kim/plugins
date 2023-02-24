@@ -24,6 +24,19 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
       const MethodChannel('flutter_reactive_ble_method');
 
   @override
+  final Stream<BleStatus> bleStatusStream =
+      const EventChannel('flutter_reactive_ble_status')
+          .receiveBroadcastStream()
+          .map((dynamic event) => BleStatus.values.byName(event as String));
+
+  @override
+  final Stream<ScanResult> scanStream = const EventChannel(
+          'flutter_reactive_ble_scan')
+      .receiveBroadcastStream()
+      .map((dynamic event) =>
+          ScanResultExtension.fromMap((event as Map).cast<String, Object>()));
+
+  @override
   final Stream<ConnectionStateUpdate> connectionUpdateStream =
       const EventChannel('flutter_reactive_ble_connected_device')
           .receiveBroadcastStream()
@@ -36,19 +49,6 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
           .receiveBroadcastStream()
           .map((dynamic event) => CharacteristicValueExtension.fromMap(
               (event as Map).cast<String, Object>()));
-
-  @override
-  final Stream<ScanResult> scanStream = const EventChannel(
-          'flutter_reactive_ble_scan')
-      .receiveBroadcastStream()
-      .map((dynamic event) =>
-          ScanResultExtension.fromMap((event as Map).cast<String, Object>()));
-
-  @override
-  final Stream<BleStatus> bleStatusStream =
-      const EventChannel('flutter_reactive_ble_status')
-          .receiveBroadcastStream()
-          .map((dynamic event) => BleStatus.values.byName(event as String));
 
   @override
   Future<void> initialize() => methodChannel.invokeMethod('initialize');
@@ -113,26 +113,6 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
   }
 
   @override
-  Stream<void> subscribeToNotifications(
-    QualifiedCharacteristic characteristic,
-  ) {
-    return methodChannel.invokeMethod<void>(
-      'subscribeToNotifications',
-      <String, Object>{kQualifiedCharacteristic: characteristic.toMap()},
-    ).asStream();
-  }
-
-  @override
-  Future<void> stopSubscribingToNotifications(
-    QualifiedCharacteristic characteristic,
-  ) {
-    return methodChannel.invokeMethod(
-      'stopSubscribingToNotifications',
-      <String, Object>{kQualifiedCharacteristic: characteristic.toMap()},
-    );
-  }
-
-  @override
   Stream<void> readCharacteristic(QualifiedCharacteristic characteristic) {
     return methodChannel.invokeMethod<void>(
       'readCharacteristic',
@@ -170,5 +150,25 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
     );
     return WriteCharacteristicInfoExtension.fromMap(
         (result as Map).cast<String, Object>());
+  }
+
+  @override
+  Stream<void> subscribeToNotifications(
+    QualifiedCharacteristic characteristic,
+  ) {
+    return methodChannel.invokeMethod<void>(
+      'subscribeToNotifications',
+      <String, Object>{kQualifiedCharacteristic: characteristic.toMap()},
+    ).asStream();
+  }
+
+  @override
+  Future<void> stopSubscribingToNotifications(
+    QualifiedCharacteristic characteristic,
+  ) {
+    return methodChannel.invokeMethod(
+      'stopSubscribingToNotifications',
+      <String, Object>{kQualifiedCharacteristic: characteristic.toMap()},
+    );
   }
 }

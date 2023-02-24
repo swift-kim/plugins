@@ -32,13 +32,21 @@ QualifiedCharacteristic::QualifiedCharacteristic(const BleDevice *device,
   }
 }
 
-bool QualifiedCharacteristic::IsReadable() const {
+int QualifiedCharacteristic::GetProperties() const {
   int properties = 0;
   int ret = bt_gatt_characteristic_get_properties(handle_, &properties);
   if (ret != BT_ERROR_NONE) {
     LOG_ERROR("Unable to get characteristic properties: %s",
               get_error_message(ret));
-    return false;
   }
-  return properties & BT_GATT_PROPERTY_READ;
+  return properties;
+}
+
+void QualifiedCharacteristic::SetWriteType(bool no_response) {
+  int ret = bt_gatt_characteristic_set_write_type(
+      handle_, no_response ? BT_GATT_WRITE_TYPE_WRITE_NO_RESPONSE
+                           : BT_GATT_WRITE_TYPE_WRITE);
+  if (ret != BT_ERROR_NONE) {
+    LOG_ERROR("Failed to set write type: %s", get_error_message(ret));
+  }
 }
