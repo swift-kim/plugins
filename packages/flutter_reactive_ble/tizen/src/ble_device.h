@@ -33,7 +33,7 @@ struct DiscoveredService {
 
 typedef std::function<void(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& bytes)>
-    CharacteristicReadCallback;
+    CharacteristicEventCallback;
 
 typedef std::function<void(const QualifiedCharacteristic& characteristic)>
     CharacteristicWriteCallback;
@@ -65,10 +65,10 @@ class BleDevice {
   // Unsubscribes from the characteristic.
   bool StopNotifications(const QualifiedCharacteristic& characteristic);
 
-  void SetNotificationCallbacks(CharacteristicReadCallback on_read,
+  void SetNotificationCallbacks(CharacteristicEventCallback on_event,
                                 ErrorCallback on_error) {
-    characteristic_read_callback_ = std::move(on_read);
-    characteristic_read_error_callback_ = std::move(on_error);
+    characteristic_event_callback_ = std::move(on_event);
+    characteristic_event_error_callback_ = std::move(on_error);
   }
 
   std::shared_ptr<QualifiedCharacteristic> FindCharacteristicById(
@@ -126,8 +126,8 @@ class BleDevice {
   bt_gatt_client_h handle_ = nullptr;
 
   std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
-  CharacteristicReadCallback characteristic_read_callback_;
-  ErrorCallback characteristic_read_error_callback_;
+  CharacteristicEventCallback characteristic_event_callback_;
+  ErrorCallback characteristic_event_error_callback_;
   CharacteristicWriteCallback characteristic_write_callback_;
   ErrorCallback characteristic_write_error_callback_;
 

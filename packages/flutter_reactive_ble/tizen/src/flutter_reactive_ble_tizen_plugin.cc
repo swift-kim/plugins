@@ -120,12 +120,12 @@ flutter::EncodableValue ServiceToEncodableValue(
 }
 
 // Callbacks shared by subscribeToNotifications and readCharacteristic.
-CharacteristicReadCallback characteristic_read_callback_;
-ErrorCallback characteristic_read_error_callback_;
+CharacteristicEventCallback characteristic_event_callback_;
+ErrorCallback characteristic_event_error_callback_;
 
 class BleCharUpdateStreamHandler : public FlStreamHandler {
  public:
-  explicit BleCharUpdateStreamHandler(BleTizen *ble_tizen)
+  explicit BleCharUpdateStreamHandler(std::shared_ptr<BleTizen> ble_tizen)
       : ble_tizen_(ble_tizen){};
 
  protected:
@@ -133,7 +133,7 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    characteristic_read_callback_ =
+    characteristic_event_callback_ =
         [this](const QualifiedCharacteristic &characteristic,
                const std::vector<uint8_t> &data) {
           flutter::EncodableMap characteristic_map = {
@@ -152,7 +152,7 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
           };
           events_->Success(flutter::EncodableValue(map));
         };
-    characteristic_read_error_callback_ =
+    characteristic_event_error_callback_ =
         [this](int error_code, const std::string &error_message) {
           events_->Error(std::to_string(error_code), error_message);
         };
@@ -161,20 +161,20 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    characteristic_read_callback_ = nullptr;
-    characteristic_read_error_callback_ = nullptr;
+    characteristic_event_callback_ = nullptr;
+    characteristic_event_error_callback_ = nullptr;
     events_.reset();
     return nullptr;
   }
 
  private:
-  BleTizen *ble_tizen_;
+  std::shared_ptr<BleTizen> ble_tizen_;
   std::unique_ptr<FlEventSink> events_;
 };
 
 class ConnectionUpdateStreamHandler : public FlStreamHandler {
  public:
-  explicit ConnectionUpdateStreamHandler(BleTizen *ble_tizen)
+  explicit ConnectionUpdateStreamHandler(std::shared_ptr<BleTizen> ble_tizen)
       : ble_tizen_(ble_tizen){};
 
  protected:
@@ -214,13 +214,14 @@ class ConnectionUpdateStreamHandler : public FlStreamHandler {
   }
 
  private:
-  BleTizen *ble_tizen_;
+  std::shared_ptr<BleTizen> ble_tizen_;
   std::unique_ptr<FlEventSink> events_;
 };
 
 class BleScanStreamHandler : public FlStreamHandler {
  public:
-  explicit BleScanStreamHandler(BleTizen *ble_tizen) : ble_tizen_(ble_tizen){};
+  explicit BleScanStreamHandler(std::shared_ptr<BleTizen> ble_tizen)
+      : ble_tizen_(ble_tizen){};
 
  protected:
   std::unique_ptr<FlStreamHandlerError> OnListenInternal(
@@ -269,13 +270,13 @@ class BleScanStreamHandler : public FlStreamHandler {
   }
 
  private:
-  BleTizen *ble_tizen_;
+  std::shared_ptr<BleTizen> ble_tizen_;
   std::unique_ptr<FlEventSink> events_;
 };
 
 class BleStatusStreamHandler : public FlStreamHandler {
  public:
-  explicit BleStatusStreamHandler(BleTizen *ble_tizen)
+  explicit BleStatusStreamHandler(std::shared_ptr<BleTizen> ble_tizen)
       : ble_tizen_(ble_tizen){};
 
  protected:
@@ -311,7 +312,7 @@ class BleStatusStreamHandler : public FlStreamHandler {
   }
 
  private:
-  BleTizen *ble_tizen_;
+  std::shared_ptr<BleTizen> ble_tizen_;
   std::unique_ptr<FlEventSink> events_;
 };
 
@@ -333,35 +334,35 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
     registrar->AddPlugin(std::move(plugin));
   }
 
-  FlutterReactiveBleTizenPlugin() : ble_tizen_(std::make_unique<BleTizen>()) {}
+  FlutterReactiveBleTizenPlugin() : ble_tizen_(std::make_shared<BleTizen>()) {}
 
   virtual ~FlutterReactiveBleTizenPlugin() {}
 
  private:
   void SetUpEventChannels(flutter::PluginRegistrar *registrar) {
-    connected_device_channel_ = std::make_unique<FlEventChannel>(
-        registrar->messenger(), "flutter_reactive_ble_connected_device",
+    ble_status_channel_ = std::make_unique<FlEventChannel>(
+        registrar->messenger(), "flutter_reactive_ble_status",
         &flutter::StandardMethodCodec::GetInstance());
-    connected_device_channel_->SetStreamHandler(
-        std::make_unique<ConnectionUpdateStreamHandler>(ble_tizen_.get()));
-
-    char_event_channel_ = std::make_unique<FlEventChannel>(
-        registrar->messenger(), "flutter_reactive_ble_char_update",
-        &flutter::StandardMethodCodec::GetInstance());
-    char_event_channel_->SetStreamHandler(
-        std::make_unique<BleCharUpdateStreamHandler>(ble_tizen_.get()));
+    ble_status_channel_->SetStreamHandler(
+        std::make_unique<BleStatusStreamHandler>(ble_tizen_));
 
     scan_event_channel_ = std::make_unique<FlEventChannel>(
         registrar->messenger(), "flutter_reactive_ble_scan",
         &flutter::StandardMethodCodec::GetInstance());
     scan_event_channel_->SetStreamHandler(
-        std::make_unique<BleScanStreamHandler>(ble_tizen_.get()));
+        std::make_unique<BleScanStreamHandler>(ble_tizen_));
 
-    ble_status_channel_ = std::make_unique<FlEventChannel>(
-        registrar->messenger(), "flutter_reactive_ble_status",
+    connected_device_channel_ = std::make_unique<FlEventChannel>(
+        registrar->messenger(), "flutter_reactive_ble_connected_device",
         &flutter::StandardMethodCodec::GetInstance());
-    ble_status_channel_->SetStreamHandler(
-        std::make_unique<BleStatusStreamHandler>(ble_tizen_.get()));
+    connected_device_channel_->SetStreamHandler(
+        std::make_unique<ConnectionUpdateStreamHandler>(ble_tizen_));
+
+    char_event_channel_ = std::make_unique<FlEventChannel>(
+        registrar->messenger(), "flutter_reactive_ble_char_update",
+        &flutter::StandardMethodCodec::GetInstance());
+    char_event_channel_->SetStreamHandler(
+        std::make_unique<BleCharUpdateStreamHandler>(ble_tizen_));
   }
 
   void HandleMethodCall(const FlMethodCall &method_call,
@@ -512,7 +513,8 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
 
     if (method_name == "readCharacteristic") {
       if (!characteristic->IsReadable()) {
-        result->Error("Operation failed", "Not supported operation.");
+        result->Error("Operation failed",
+                      "Operation not allowed on this characteristic.");
         return;
       }
       if (!device->ReadCharacteristic(*characteristic)) {
@@ -520,15 +522,16 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                       device->GetLastErrorString());
         return;
       }
-      device->SetNotificationCallbacks(characteristic_read_callback_,
-                                       characteristic_read_error_callback_);
+      device->SetNotificationCallbacks(characteristic_event_callback_,
+                                       characteristic_event_error_callback_);
       result->Success();
     } else if (method_name == "writeCharacteristicWithResponse" ||
                method_name == "writeCharacteristicWithoutResponse") {
       bool no_response = method_name == "writeCharacteristicWithoutResponse";
       if ((no_response && !characteristic->IsWritableWithoutResponse()) ||
           (!no_response && !characteristic->IsWritable())) {
-        result->Error("Operation failed", "Not supported operation.");
+        result->Error("Operation failed",
+                      "Operation not allowed on this characteristic.");
         return;
       }
       characteristic->SetWriteType(no_response);
@@ -575,8 +578,8 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                       device->GetLastErrorString());
         return;
       }
-      device->SetNotificationCallbacks(characteristic_read_callback_,
-                                       characteristic_read_error_callback_);
+      device->SetNotificationCallbacks(characteristic_event_callback_,
+                                       characteristic_event_error_callback_);
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
       if (!device->StopNotifications(*characteristic)) {
@@ -588,11 +591,11 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
     }
   }
 
-  std::unique_ptr<BleTizen> ble_tizen_;
+  std::shared_ptr<BleTizen> ble_tizen_;
+  std::unique_ptr<FlEventChannel> ble_status_channel_;
+  std::unique_ptr<FlEventChannel> scan_event_channel_;
   std::unique_ptr<FlEventChannel> connected_device_channel_;
   std::unique_ptr<FlEventChannel> char_event_channel_;
-  std::unique_ptr<FlEventChannel> scan_event_channel_;
-  std::unique_ptr<FlEventChannel> ble_status_channel_;
 };
 
 }  // namespace
