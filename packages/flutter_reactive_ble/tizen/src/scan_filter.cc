@@ -23,6 +23,8 @@ ScanFilter::ScanFilter(const Uuid &service_id) {
 };
 
 ScanFilter::~ScanFilter() {
+  // TODO(swift-kim): Calling bt_adapter_le_scan_filter_destroy may result in
+  // SIGABRT on RPi4.
   if (handle_) {
     bt_adapter_le_scan_filter_destroy(handle_);
   }

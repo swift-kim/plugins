@@ -101,6 +101,7 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         device.device_id = std::string(info->remote_address);
         device.rssi = info->rssi;
 
+        // TODO(swift-kim): Cache the name.
         char *name = nullptr;
         int ret = bt_adapter_le_get_scan_result_device_name(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &name);
@@ -113,7 +114,7 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
           device.name = std::string(name);
           free(name);
         } else if (ret != BT_ERROR_NO_DATA) {
-          // TODO(swift-kim): Add error callbacks.
+          // TODO(swift-kim): Add an error callback.
           LOG_ERROR("Could not obtain name info from the device %s.",
                     info->remote_address);
           return;
@@ -246,20 +247,67 @@ bool BleTizen::SetConnectionStateChangeCallback(
       [](int result, bool connected, const char *remote_address,
          void *user_data) {
         BleTizen *self = static_cast<BleTizen *>(user_data);
-        if (result != BT_ERROR_NONE && result != BT_ERROR_ALREADY_DONE) {
+        // TODO(swift-kim): Remove this log.
+        LOG_ERROR("Address: %s (%d) (%s)", remote_address, connected,
+                  get_error_message(result));
+        if (remote_address) {
+          if (result != BT_ERROR_NONE) {
+            LOG_ERROR("The connection request failed for device %s: %s",
+                      remote_address, get_error_message(result));
+          }
+          std::string device_id = std::string(remote_address);
+          bool success =
+              result == BT_ERROR_NONE || result == BT_ERROR_ALREADY_DONE;
+          ConnectionState state = success && connected
+                                      ? ConnectionState::kConnected
+                                      : ConnectionState::kDisconnected;
+          if (self->connection_state_change_callback_) {
+            self->connection_state_change_callback_(device_id, state);
+          }
+        } else {
           LOG_ERROR("The connection request failed: %s",
                     get_error_message(result));
           if (self->connection_error_callback_) {
             self->connection_error_callback_(result, get_error_message(result));
           }
-        } else {
-          std::string device_id = std::string(remote_address);
-          ConnectionState state = connected ? ConnectionState::kConnected
-                                            : ConnectionState::kDisconnected;
-          if (self->connection_state_change_callback_) {
-            self->connection_state_change_callback_(device_id, state);
-          }
         }
+        // if (result == BT_ERROR_NONE || result == BT_ERROR_ALREADY_DONE ||
+        //     result == BT_ERROR_NOT_IN_PROGRESS) {
+        //   // TODO(swift-kim): Verify if the connected parameter is valid when
+        //   // BT_ERROR_ALREADY_DONE.
+        //   std::string device_id;
+        //   if (remote_address) {
+        //     device_id = std::string(remote_address);
+        //   }
+        //   ConnectionState state = connected ? ConnectionState::kConnected
+        //                                     : ConnectionState::kDisconnected;
+        //   if (self->connection_state_change_callback_) {
+        //     self->connection_state_change_callback_(device_id, state);
+        //   }
+        // } else {
+        //   LOG_ERROR("The connection request failed: %s",
+        //             get_error_message(result));
+        //   if (self->connection_error_callback_) {
+        //     self->connection_error_callback_(result,
+        //     get_error_message(result));
+        //   }
+        // }
+
+        // if (result != BT_ERROR_NONE && result != BT_ERROR_ALREADY_DONE) {
+        //   LOG_ERROR("The connection request failed: %s",
+        //             get_error_message(result));
+        //   if (self->connection_error_callback_) {
+        //     self->connection_error_callback_(result,
+        //     get_error_message(result));
+        //   }
+        // } else {
+        //   std::string device_id = std::string(remote_address);
+        //   ConnectionState state = connected ? ConnectionState::kConnected
+        //                                     : ConnectionState::kDisconnected;
+        //   if (self->connection_state_change_callback_) {
+        //     self->connection_state_change_callback_(device_id, state);
+        //   }
+        // }
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
