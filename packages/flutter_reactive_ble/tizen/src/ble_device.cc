@@ -148,7 +148,7 @@ bool BleDevice::ReadCharacteristic(
 
 bool BleDevice::WriteCharacteristic(
     const QualifiedCharacteristic &characteristic,
-    const std::vector<uint8_t> &value, CharacteristicWriteCallback on_complete,
+    const std::vector<uint8_t> &value, CharacteristicWriteCallback on_done,
     ErrorCallback on_error) {
   if (characteristic_write_callback_) {
     LOG_ERROR("A write operation is already in progress.");
@@ -164,7 +164,7 @@ bool BleDevice::WriteCharacteristic(
   }
 
   // The callbacks must be set before bt_gatt_client_write_value() is called.
-  characteristic_write_callback_ = std::move(on_complete);
+  characteristic_write_callback_ = std::move(on_done);
   characteristic_write_error_callback_ = std::move(on_error);
 
   last_error_ = bt_gatt_client_write_value(
@@ -179,10 +179,8 @@ bool BleDevice::WriteCharacteristic(
                 result, get_error_message(result));
           }
         } else {
-          std::shared_ptr<QualifiedCharacteristic> characteristic =
-              self->FindCharacteristic(request_handle);
-          if (self->characteristic_write_callback_ && characteristic) {
-            self->characteristic_write_callback_(*characteristic);
+          if (self->characteristic_write_callback_) {
+            self->characteristic_write_callback_();
           }
         }
         self->characteristic_write_callback_ = nullptr;

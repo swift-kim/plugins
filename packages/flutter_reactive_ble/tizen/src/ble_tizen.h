@@ -75,9 +75,9 @@ class BleTizen {
   // Stops scanning for devices.
   bool StopScan();
 
-  void SetDeviceScanCallback(DeviceScanCallback on_complete,
+  void SetDeviceScanCallback(DeviceScanCallback on_done,
                              ErrorCallback on_error) {
-    device_scan_callback_ = std::move(on_complete);
+    device_scan_callback_ = std::move(on_done);
     device_scan_error_callback_ = std::move(on_error);
   }
 

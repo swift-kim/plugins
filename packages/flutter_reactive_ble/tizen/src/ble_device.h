@@ -35,8 +35,7 @@ typedef std::function<void(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& bytes)>
     CharacteristicEventCallback;
 
-typedef std::function<void(const QualifiedCharacteristic& characteristic)>
-    CharacteristicWriteCallback;
+typedef std::function<void()> CharacteristicWriteCallback;
 
 typedef std::function<void(int error_code, const std::string& error_message)>
     ErrorCallback;
@@ -56,7 +55,7 @@ class BleDevice {
   // Writes a value to the specified characteristic.
   bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& value,
-                           CharacteristicWriteCallback on_complete,
+                           CharacteristicWriteCallback on_done,
                            ErrorCallback on_error);
 
   // Subscribes to updates from the specified characteristic.

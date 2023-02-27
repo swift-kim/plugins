@@ -545,20 +545,10 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       FlMethodResult *result_ptr = result.release();
       if (!device->WriteCharacteristic(
               *characteristic, value,
-              [result =
-                   result_ptr](const QualifiedCharacteristic &characteristic) {
-                flutter::EncodableMap characteristic_map = {
-                    {flutter::EncodableValue(kDeviceId),
-                     flutter::EncodableValue(characteristic.device_id())},
-                    {flutter::EncodableValue(kServiceId),
-                     flutter::EncodableValue(characteristic.service_id())},
-                    {flutter::EncodableValue(kCharacteristicId),
-                     flutter::EncodableValue(
-                         characteristic.characteristic_id())},
-                };
+              [result = result_ptr, qualified]() {
                 flutter::EncodableMap map = {
                     {flutter::EncodableValue(kQualifiedCharacteristic),
-                     flutter::EncodableValue(characteristic_map)},
+                     flutter::EncodableValue(qualified)},
                 };
                 result->Success(flutter::EncodableValue(map));
                 delete result;
