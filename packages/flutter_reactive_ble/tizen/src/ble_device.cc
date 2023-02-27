@@ -108,7 +108,6 @@ std::vector<DiscoveredService> BleDevice::DiscoverServices() {
 
 bool BleDevice::ReadCharacteristic(
     const QualifiedCharacteristic &characteristic) {
-  // TODO(swift-kim): Should the operation be thread-safe?
   last_error_ = bt_gatt_client_read_value(
       characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
@@ -150,12 +149,6 @@ bool BleDevice::WriteCharacteristic(
     const QualifiedCharacteristic &characteristic,
     const std::vector<uint8_t> &value, CharacteristicWriteCallback on_done,
     ErrorCallback on_error) {
-  if (characteristic_write_callback_) {
-    LOG_ERROR("A write operation is already in progress.");
-    last_error_ = TIZEN_ERROR_ALREADY_IN_PROGRESS;
-    return false;
-  }
-
   last_error_ = bt_gatt_set_value(characteristic.handle(),
                                   reinterpret_cast<const char *>(value.data()),
                                   static_cast<int>(value.size()));
@@ -163,33 +156,31 @@ bool BleDevice::WriteCharacteristic(
     return false;
   }
 
-  // The callbacks must be set before bt_gatt_client_write_value() is called.
-  characteristic_write_callback_ = std::move(on_done);
-  characteristic_write_error_callback_ = std::move(on_error);
+  struct UserData {
+    CharacteristicWriteCallback on_done;
+    ErrorCallback on_error;
+  } *callbacks = new UserData;
+  callbacks->on_done = std::move(on_done);
+  callbacks->on_error = std::move(on_error);
 
   last_error_ = bt_gatt_client_write_value(
       characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
-        BleDevice *self = static_cast<BleDevice *>(user_data);
+        UserData *callbacks = static_cast<UserData *>(user_data);
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The write operation resulted in an error: %s",
                     get_error_message(result));
-          if (self->characteristic_write_error_callback_) {
-            self->characteristic_write_error_callback_(
-                result, get_error_message(result));
+          if (callbacks->on_error) {
+            callbacks->on_error(result, get_error_message(result));
           }
-        } else {
-          if (self->characteristic_write_callback_) {
-            self->characteristic_write_callback_();
-          }
+        } else if (callbacks->on_done) {
+          callbacks->on_done();
         }
-        self->characteristic_write_callback_ = nullptr;
-        self->characteristic_write_error_callback_ = nullptr;
+        delete callbacks;
       },
-      this);
+      callbacks);
   if (last_error_ != BT_ERROR_NONE) {
-    characteristic_write_callback_ = nullptr;
-    characteristic_write_error_callback_ = nullptr;
+    delete callbacks;
     return false;
   }
 

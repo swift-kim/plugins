@@ -127,8 +127,6 @@ class BleDevice {
   std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
   CharacteristicEventCallback characteristic_event_callback_;
   ErrorCallback characteristic_event_error_callback_;
-  CharacteristicWriteCallback characteristic_write_callback_;
-  ErrorCallback characteristic_write_error_callback_;
 
   int last_error_ = BT_ERROR_NONE;
 };
