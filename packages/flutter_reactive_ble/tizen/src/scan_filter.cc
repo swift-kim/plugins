@@ -24,8 +24,7 @@ ScanFilter::ScanFilter(const Uuid &service_id) {
 
 ScanFilter::~ScanFilter() {
 #ifdef TV_PROFILE
-  // Calling bt_adapter_le_scan_filter_destroy() results in a crash on
-  // wearable and common devices.
+  // This call results in a crash on wearable and common devices.
   if (handle_) {
     bt_adapter_le_scan_filter_destroy(handle_);
   }

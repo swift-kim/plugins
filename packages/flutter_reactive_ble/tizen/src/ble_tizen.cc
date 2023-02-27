@@ -135,11 +135,6 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         int ret = bt_adapter_le_get_scan_result_manufacturer_data(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &manufacturer_id,
             &manufacturer_data, &manufacturer_data_len);
-        if (ret == BT_ERROR_NO_DATA) {
-          ret = bt_adapter_le_get_scan_result_manufacturer_data(
-              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &manufacturer_id,
-              &manufacturer_data, &manufacturer_data_len);
-        }
         if (ret == BT_ERROR_NONE) {
           device.manufacturer_data = std::vector<uint8_t>(
               manufacturer_data, manufacturer_data + manufacturer_data_len);
@@ -158,11 +153,6 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         ret = bt_adapter_le_get_scan_result_service_uuids(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_ids,
             &service_count);
-        if (ret == BT_ERROR_NO_DATA) {
-          ret = bt_adapter_le_get_scan_result_service_uuids(
-              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &service_ids,
-              &service_count);
-        }
         if (ret == BT_ERROR_NONE) {
           for (int i = 0; i < service_count; ++i) {
             device.service_ids.emplace_back(std::string(service_ids[i]));
@@ -183,11 +173,6 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         ret = bt_adapter_le_get_scan_result_service_data_list(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &service_data,
             &service_data_count);
-        if (ret == BT_ERROR_NO_DATA) {
-          ret = bt_adapter_le_get_scan_result_service_data_list(
-              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &service_data,
-              &service_data_count);
-        }
         if (ret == BT_ERROR_NONE) {
           for (int i = 0; i < service_data_count; ++i) {
             std::string service_id = service_data[i].service_uuid;

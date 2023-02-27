@@ -568,8 +568,9 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                 result->Error(std::to_string(error_code), error_message);
                 delete result;
               })) {
-        result->Error(std::to_string(device->GetLastError()),
-                      device->GetLastErrorString());
+        result_ptr->Error(std::to_string(device->GetLastError()),
+                          device->GetLastErrorString());
+        delete result_ptr;
         return;
       }
     } else if (method_name == "subscribeToNotifications") {

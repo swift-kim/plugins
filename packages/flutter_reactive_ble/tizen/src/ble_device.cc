@@ -150,6 +150,12 @@ bool BleDevice::WriteCharacteristic(
     const QualifiedCharacteristic &characteristic,
     const std::vector<uint8_t> &value, CharacteristicWriteCallback on_complete,
     ErrorCallback on_error) {
+  if (characteristic_write_callback_) {
+    LOG_ERROR("A write operation is already in progress.");
+    last_error_ = TIZEN_ERROR_ALREADY_IN_PROGRESS;
+    return false;
+  }
+
   last_error_ = bt_gatt_set_value(characteristic.handle(),
                                   reinterpret_cast<const char *>(value.data()),
                                   static_cast<int>(value.size()));
@@ -157,11 +163,9 @@ bool BleDevice::WriteCharacteristic(
     return false;
   }
 
-  if (characteristic_write_callback_) {
-    LOG_ERROR("A write operation is already in progress.");
-    last_error_ = TIZEN_ERROR_ALREADY_IN_PROGRESS;
-    return false;
-  }
+  // The callbacks must be set before bt_gatt_client_write_value() is called.
+  characteristic_write_callback_ = std::move(on_complete);
+  characteristic_write_error_callback_ = std::move(on_error);
 
   last_error_ = bt_gatt_client_write_value(
       characteristic.handle(),
@@ -186,10 +190,10 @@ bool BleDevice::WriteCharacteristic(
       },
       this);
   if (last_error_ != BT_ERROR_NONE) {
+    characteristic_write_callback_ = nullptr;
+    characteristic_write_error_callback_ = nullptr;
     return false;
   }
-  characteristic_write_callback_ = std::move(on_complete);
-  characteristic_write_error_callback_ = std::move(on_error);
 
   return true;
 }
