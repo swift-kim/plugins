@@ -50,7 +50,8 @@ class BleDevice {
   std::vector<DiscoveredService> DiscoverServices();
 
   // Reads a value from the specified characteristic.
-  bool ReadCharacteristic(const QualifiedCharacteristic& characteristic);
+  bool ReadCharacteristic(const QualifiedCharacteristic& characteristic,
+                          VoidCallback on_done, ErrorCallback on_error);
 
   // Writes a value to the specified characteristic.
   bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
@@ -63,10 +64,8 @@ class BleDevice {
   // Unsubscribes from the characteristic.
   bool StopNotifications(const QualifiedCharacteristic& characteristic);
 
-  void SetNotificationCallbacks(NotificationCallback on_event,
-                                ErrorCallback on_error) {
+  void SetNotificationCallback(NotificationCallback on_event) {
     notification_callback_ = std::move(on_event);
-    notification_error_callback_ = std::move(on_error);
   }
 
   std::shared_ptr<QualifiedCharacteristic> FindCharacteristicById(
@@ -114,7 +113,6 @@ class BleDevice {
 
   std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
   NotificationCallback notification_callback_;
-  ErrorCallback notification_error_callback_;
 
   int last_error_ = BT_ERROR_NONE;
 };

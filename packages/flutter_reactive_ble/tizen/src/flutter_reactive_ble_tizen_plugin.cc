@@ -119,9 +119,8 @@ flutter::EncodableValue ServiceToEncodableValue(
   return flutter::EncodableValue(map);
 }
 
-// Callbacks shared by subscribeToNotifications and readCharacteristic.
+// A callback shared by subscribeToNotifications and readCharacteristic.
 NotificationCallback notification_callback_;
-ErrorCallback notification_error_callback_;
 
 class BleCharUpdateStreamHandler : public FlStreamHandler {
  public:
@@ -152,17 +151,12 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
       };
       events_->Success(flutter::EncodableValue(map));
     };
-    notification_error_callback_ = [this](int error_code,
-                                          const std::string &error_message) {
-      events_->Error(std::to_string(error_code), error_message);
-    };
     return nullptr;
   }
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
     notification_callback_ = nullptr;
-    notification_error_callback_ = nullptr;
     events_.reset();
     return nullptr;
   }
@@ -517,15 +511,23 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                       "Operation not allowed on this characteristic.");
         return;
       }
-      device->SetNotificationCallbacks(notification_callback_,
-                                       notification_error_callback_);
+      device->SetNotificationCallback(notification_callback_);
 
-      if (!device->ReadCharacteristic(*characteristic)) {
-        result->Error(std::to_string(device->GetLastError()),
-                      device->GetLastErrorString());
-        return;
+      FlMethodResult *result_ptr = result.release();
+      if (!device->ReadCharacteristic(
+              *characteristic,
+              [result_ptr, device]() {
+                result_ptr->Success();
+                delete result_ptr;
+              },
+              [result_ptr](int error_code, const std::string &error_message) {
+                result_ptr->Error(std::to_string(error_code), error_message);
+                delete result_ptr;
+              })) {
+        result_ptr->Error(std::to_string(device->GetLastError()),
+                          device->GetLastErrorString());
+        delete result_ptr;
       }
-      result->Success();
     } else if (method_name == "writeCharacteristicWithResponse" ||
                method_name == "writeCharacteristicWithoutResponse") {
       bool no_response = method_name == "writeCharacteristicWithoutResponse";
@@ -563,8 +565,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         delete result_ptr;
       }
     } else if (method_name == "subscribeToNotifications") {
-      device->SetNotificationCallbacks(notification_callback_,
-                                       notification_error_callback_);
+      device->SetNotificationCallback(notification_callback_);
       if (!device->ListenNotifications(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());
@@ -572,7 +573,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       }
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
-      device->SetNotificationCallbacks(nullptr, nullptr);
+      device->SetNotificationCallback(nullptr);
       if (!device->StopNotifications(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());

@@ -107,29 +107,39 @@ std::vector<DiscoveredService> BleDevice::DiscoverServices() {
 }
 
 bool BleDevice::ReadCharacteristic(
-    const QualifiedCharacteristic &characteristic) {
+    const QualifiedCharacteristic &characteristic, VoidCallback on_done,
+    ErrorCallback on_error) {
+  struct UserData {
+    BleDevice *self;
+    VoidCallback on_done;
+    ErrorCallback on_error;
+  } *params = new UserData;
+  params->self = this;
+  params->on_done = std::move(on_done);
+  params->on_error = std::move(on_error);
+
   last_error_ = bt_gatt_client_read_value(
       characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
-        BleDevice *self = static_cast<BleDevice *>(user_data);
+        UserData *params = static_cast<UserData *>(user_data);
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The read operation resulted in an error: %s",
                     get_error_message(result));
-          if (self->notification_error_callback_) {
-            self->notification_error_callback_(result,
-                                               get_error_message(result));
+          if (params->on_error) {
+            params->on_error(result, get_error_message(result));
           }
+          delete params;
           return;
         }
 
         std::shared_ptr<QualifiedCharacteristic> characteristic =
-            self->FindCharacteristic(request_handle);
+            params->self->FindCharacteristic(request_handle);
         if (!characteristic) {
           LOG_ERROR("The characteristic is unexpectedly not found.");
-          if (self->notification_error_callback_) {
-            self->notification_error_callback_(BT_ERROR_NONE,
-                                               "Something went wrong.");
+          if (params->on_error) {
+            params->on_error(BT_ERROR_NONE, "Something went wrong.");
           }
+          delete params;
           return;
         }
 
@@ -137,19 +147,25 @@ bool BleDevice::ReadCharacteristic(
         int length = 0;
         int ret = bt_gatt_get_value(request_handle, &value, &length);
         if (ret != BT_ERROR_NONE) {
-          if (self->notification_error_callback_) {
-            self->notification_error_callback_(ret, get_error_message(ret));
+          LOG_ERROR("Failed to retrieve a value: %s", get_error_message(ret));
+          if (params->on_error) {
+            params->on_error(ret, get_error_message(ret));
           }
+          delete params;
           return;
         }
         std::vector<uint8_t> bytes(value, value + length);
         free(value);
 
-        if (self->notification_callback_) {
-          self->notification_callback_(*characteristic, bytes);
+        if (params->self->notification_callback_) {
+          params->self->notification_callback_(*characteristic, bytes);
         }
+        if (params->on_done) {
+          params->on_done();
+        }
+        delete params;
       },
-      this);
+      params);
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
