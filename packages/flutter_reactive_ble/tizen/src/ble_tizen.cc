@@ -101,29 +101,38 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         device.device_id = std::string(info->remote_address);
         device.rssi = info->rssi;
 
-        // TODO(swift-kim): Cache the name.
-        char *name = nullptr;
-        int ret = bt_adapter_le_get_scan_result_device_name(
-            info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &name);
-        if (ret == BT_ERROR_NO_DATA) {
-          // Retrying with a different packet type.
-          ret = bt_adapter_le_get_scan_result_device_name(
-              info, BT_ADAPTER_LE_PACKET_ADVERTISING, &name);
-        }
-        if (ret == BT_ERROR_NONE) {
-          device.name = std::string(name);
-          free(name);
-        } else if (ret != BT_ERROR_NO_DATA) {
-          // TODO(swift-kim): Add an error callback.
-          LOG_ERROR("Could not obtain name info from the device %s.",
-                    info->remote_address);
-          return;
+        auto iter = self->cached_device_names_.find(device.device_id);
+        if (iter != self->cached_device_names_.end()) {
+          device.name = iter->second;
+        } else {
+          char *name = nullptr;
+          int ret = bt_adapter_le_get_scan_result_device_name(
+              info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &name);
+          if (ret == BT_ERROR_NO_DATA) {
+            // Retrying with a different packet type.
+            ret = bt_adapter_le_get_scan_result_device_name(
+                info, BT_ADAPTER_LE_PACKET_ADVERTISING, &name);
+          }
+          if (ret == BT_ERROR_NONE) {
+            device.name = std::string(name);
+            free(name);
+          } else if (ret != BT_ERROR_NO_DATA) {
+            LOG_ERROR("Could not obtain name info from the device %s.",
+                      info->remote_address);
+            if (self->device_scan_error_callback_) {
+              self->device_scan_error_callback_(ret, get_error_message(ret));
+            }
+            return;
+          }
+          if (!device.name.empty()) {
+            self->cached_device_names_[device.device_id] = device.name;
+          }
         }
 
         int manufacturer_id = 0;
         char *manufacturer_data = nullptr;
         int manufacturer_data_len = 0;
-        ret = bt_adapter_le_get_scan_result_manufacturer_data(
+        int ret = bt_adapter_le_get_scan_result_manufacturer_data(
             info, BT_ADAPTER_LE_PACKET_SCAN_RESPONSE, &manufacturer_id,
             &manufacturer_data, &manufacturer_data_len);
         if (ret == BT_ERROR_NO_DATA) {
@@ -138,6 +147,9 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         } else if (ret != BT_ERROR_NO_DATA) {
           LOG_ERROR("Could not obtain manufacturer info from the device %s.",
                     info->remote_address);
+          if (self->device_scan_error_callback_) {
+            self->device_scan_error_callback_(ret, get_error_message(ret));
+          }
           return;
         }
 
@@ -160,6 +172,9 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         } else if (ret != BT_ERROR_NO_DATA) {
           LOG_ERROR("Could not obtain service UUIDs from the device %s.",
                     info->remote_address);
+          if (self->device_scan_error_callback_) {
+            self->device_scan_error_callback_(ret, get_error_message(ret));
+          }
           return;
         }
 
@@ -186,6 +201,9 @@ bool BleTizen::Scan(const std::vector<Uuid> &service_ids) {
         } else if (ret != BT_ERROR_NO_DATA) {
           LOG_ERROR("Could not obtain service data from the device %s.",
                     info->remote_address);
+          if (self->device_scan_error_callback_) {
+            self->device_scan_error_callback_(ret, get_error_message(ret));
+          }
           return;
         }
 

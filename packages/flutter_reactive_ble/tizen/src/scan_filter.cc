@@ -23,11 +23,13 @@ ScanFilter::ScanFilter(const Uuid &service_id) {
 };
 
 ScanFilter::~ScanFilter() {
-  // TODO(swift-kim): Calling bt_adapter_le_scan_filter_destroy may result in
-  // SIGABRT on RPi4.
+#ifdef TV_PROFILE
+  // Calling bt_adapter_le_scan_filter_destroy() results in a crash on
+  // wearable and common devices.
   if (handle_) {
     bt_adapter_le_scan_filter_destroy(handle_);
   }
+#endif
 };
 
 bool ScanFilter::Register() {

@@ -123,6 +123,7 @@ class BleTizen {
   ErrorCallback connection_error_callback_;
 
   std::unordered_map<std::string, std::shared_ptr<BleDevice>> devices_;
+  std::unordered_map<std::string, std::string> cached_device_names_;
   std::vector<ScanFilter> filters_;
 
   int last_error_ = BT_ERROR_NONE;
