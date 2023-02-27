@@ -517,9 +517,9 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                       "Operation not allowed on this characteristic.");
         return;
       }
-
       device->SetNotificationCallbacks(notification_callback_,
                                        notification_error_callback_);
+
       if (!device->ReadCharacteristic(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());
@@ -572,6 +572,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       }
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
+      device->SetNotificationCallbacks(nullptr, nullptr);
       if (!device->StopNotifications(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());

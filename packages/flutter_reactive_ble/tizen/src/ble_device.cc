@@ -124,17 +124,28 @@ bool BleDevice::ReadCharacteristic(
 
         std::shared_ptr<QualifiedCharacteristic> characteristic =
             self->FindCharacteristic(request_handle);
-        if (self->notification_callback_ && characteristic) {
-          char *value = nullptr;
-          int length = 0;
-          int ret = bt_gatt_get_value(request_handle, &value, &length);
-          if (ret != BT_ERROR_NONE) {
-            LOG_ERROR("Failed to retrieve a value: %s", get_error_message(ret));
-            return;
+        if (!characteristic) {
+          LOG_ERROR("The characteristic is unexpectedly not found.");
+          if (self->notification_error_callback_) {
+            self->notification_error_callback_(BT_ERROR_NONE,
+                                               "Something went wrong.");
           }
-          std::vector<uint8_t> bytes(value, value + length);
-          free(value);
+          return;
+        }
 
+        char *value = nullptr;
+        int length = 0;
+        int ret = bt_gatt_get_value(request_handle, &value, &length);
+        if (ret != BT_ERROR_NONE) {
+          if (self->notification_error_callback_) {
+            self->notification_error_callback_(ret, get_error_message(ret));
+          }
+          return;
+        }
+        std::vector<uint8_t> bytes(value, value + length);
+        free(value);
+
+        if (self->notification_callback_) {
           self->notification_callback_(*characteristic, bytes);
         }
       },
@@ -159,28 +170,28 @@ bool BleDevice::WriteCharacteristic(
   struct UserData {
     VoidCallback on_done;
     ErrorCallback on_error;
-  } *callbacks = new UserData;
-  callbacks->on_done = std::move(on_done);
-  callbacks->on_error = std::move(on_error);
+  } *params = new UserData;
+  params->on_done = std::move(on_done);
+  params->on_error = std::move(on_error);
 
   last_error_ = bt_gatt_client_write_value(
       characteristic.handle(),
       [](int result, bt_gatt_h request_handle, void *user_data) {
-        UserData *callbacks = static_cast<UserData *>(user_data);
+        UserData *params = static_cast<UserData *>(user_data);
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The write operation resulted in an error: %s",
                     get_error_message(result));
-          if (callbacks->on_error) {
-            callbacks->on_error(result, get_error_message(result));
+          if (params->on_error) {
+            params->on_error(result, get_error_message(result));
           }
-        } else if (callbacks->on_done) {
-          callbacks->on_done();
+        } else if (params->on_done) {
+          params->on_done();
         }
-        delete callbacks;
+        delete params;
       },
-      callbacks);
+      params);
   if (last_error_ != BT_ERROR_NONE) {
-    delete callbacks;
+    delete params;
     return false;
   }
 
@@ -214,7 +225,5 @@ bool BleDevice::StopNotifications(
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  notification_callback_ = nullptr;
-  notification_error_callback_ = nullptr;
   return true;
 }
