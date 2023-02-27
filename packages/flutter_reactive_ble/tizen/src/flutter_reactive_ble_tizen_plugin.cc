@@ -120,8 +120,8 @@ flutter::EncodableValue ServiceToEncodableValue(
 }
 
 // Callbacks shared by subscribeToNotifications and readCharacteristic.
-CharacteristicEventCallback characteristic_event_callback_;
-ErrorCallback characteristic_event_error_callback_;
+NotificationCallback notification_callback_;
+ErrorCallback notification_error_callback_;
 
 class BleCharUpdateStreamHandler : public FlStreamHandler {
  public:
@@ -133,36 +133,36 @@ class BleCharUpdateStreamHandler : public FlStreamHandler {
       const flutter::EncodableValue *arguments,
       std::unique_ptr<FlEventSink> &&events) override {
     events_ = std::move(events);
-    characteristic_event_callback_ =
-        [this](const QualifiedCharacteristic &characteristic,
-               const std::vector<uint8_t> &data) {
-          flutter::EncodableMap characteristic_map = {
-              {flutter::EncodableValue(kDeviceId),
-               flutter::EncodableValue(characteristic.device_id())},
-              {flutter::EncodableValue(kServiceId),
-               flutter::EncodableValue(characteristic.service_id())},
-              {flutter::EncodableValue(kCharacteristicId),
-               flutter::EncodableValue(characteristic.characteristic_id())},
-          };
-          flutter::EncodableMap map = {
-              {flutter::EncodableValue(kQualifiedCharacteristic),
-               flutter::EncodableValue(characteristic_map)},
-              {flutter::EncodableValue(kResult),
-               flutter::EncodableValue(flutter::EncodableValue(data))},
-          };
-          events_->Success(flutter::EncodableValue(map));
-        };
-    characteristic_event_error_callback_ =
-        [this](int error_code, const std::string &error_message) {
-          events_->Error(std::to_string(error_code), error_message);
-        };
+    notification_callback_ = [this](
+                                 const QualifiedCharacteristic &characteristic,
+                                 const std::vector<uint8_t> &data) {
+      flutter::EncodableMap characteristic_map = {
+          {flutter::EncodableValue(kDeviceId),
+           flutter::EncodableValue(characteristic.device_id())},
+          {flutter::EncodableValue(kServiceId),
+           flutter::EncodableValue(characteristic.service_id())},
+          {flutter::EncodableValue(kCharacteristicId),
+           flutter::EncodableValue(characteristic.characteristic_id())},
+      };
+      flutter::EncodableMap map = {
+          {flutter::EncodableValue(kQualifiedCharacteristic),
+           flutter::EncodableValue(characteristic_map)},
+          {flutter::EncodableValue(kResult),
+           flutter::EncodableValue(flutter::EncodableValue(data))},
+      };
+      events_->Success(flutter::EncodableValue(map));
+    };
+    notification_error_callback_ = [this](int error_code,
+                                          const std::string &error_message) {
+      events_->Error(std::to_string(error_code), error_message);
+    };
     return nullptr;
   }
 
   std::unique_ptr<FlStreamHandlerError> OnCancelInternal(
       const flutter::EncodableValue *arguments) override {
-    characteristic_event_callback_ = nullptr;
-    characteristic_event_error_callback_ = nullptr;
+    notification_callback_ = nullptr;
+    notification_error_callback_ = nullptr;
     events_.reset();
     return nullptr;
   }
@@ -517,13 +517,14 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
                       "Operation not allowed on this characteristic.");
         return;
       }
+
+      device->SetNotificationCallbacks(notification_callback_,
+                                       notification_error_callback_);
       if (!device->ReadCharacteristic(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());
         return;
       }
-      device->SetNotificationCallbacks(characteristic_event_callback_,
-                                       characteristic_event_error_callback_);
       result->Success();
     } else if (method_name == "writeCharacteristicWithResponse" ||
                method_name == "writeCharacteristicWithoutResponse") {
@@ -545,32 +546,30 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       FlMethodResult *result_ptr = result.release();
       if (!device->WriteCharacteristic(
               *characteristic, value,
-              [result = result_ptr, qualified]() {
+              [result_ptr, qualified]() {
                 flutter::EncodableMap map = {
                     {flutter::EncodableValue(kQualifiedCharacteristic),
                      flutter::EncodableValue(qualified)},
                 };
-                result->Success(flutter::EncodableValue(map));
-                delete result;
+                result_ptr->Success(flutter::EncodableValue(map));
+                delete result_ptr;
               },
-              [result = result_ptr](int error_code,
-                                    const std::string &error_message) {
-                result->Error(std::to_string(error_code), error_message);
-                delete result;
+              [result_ptr](int error_code, const std::string &error_message) {
+                result_ptr->Error(std::to_string(error_code), error_message);
+                delete result_ptr;
               })) {
         result_ptr->Error(std::to_string(device->GetLastError()),
                           device->GetLastErrorString());
         delete result_ptr;
-        return;
       }
     } else if (method_name == "subscribeToNotifications") {
+      device->SetNotificationCallbacks(notification_callback_,
+                                       notification_error_callback_);
       if (!device->ListenNotifications(*characteristic)) {
         result->Error(std::to_string(device->GetLastError()),
                       device->GetLastErrorString());
         return;
       }
-      device->SetNotificationCallbacks(characteristic_event_callback_,
-                                       characteristic_event_error_callback_);
       result->Success();
     } else if (method_name == "stopSubscribingToNotifications") {
       if (!device->StopNotifications(*characteristic)) {

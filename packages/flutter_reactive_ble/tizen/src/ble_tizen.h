@@ -47,9 +47,6 @@ typedef std::function<void(const DiscoveredDevice& device)> DeviceScanCallback;
 typedef std::function<void(const std::string& device_id, ConnectionState state)>
     ConnectionStateChangeCallback;
 
-typedef std::function<void(int error_code, const std::string& error_message)>
-    ErrorCallback;
-
 // A wrapper around the bt_gatt module.
 class BleTizen {
  public:

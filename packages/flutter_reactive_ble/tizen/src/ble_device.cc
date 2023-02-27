@@ -115,16 +115,16 @@ bool BleDevice::ReadCharacteristic(
         if (result != BT_ERROR_NONE) {
           LOG_ERROR("The read operation resulted in an error: %s",
                     get_error_message(result));
-          if (self->characteristic_event_error_callback_) {
-            self->characteristic_event_error_callback_(
-                result, get_error_message(result));
+          if (self->notification_error_callback_) {
+            self->notification_error_callback_(result,
+                                               get_error_message(result));
           }
           return;
         }
 
         std::shared_ptr<QualifiedCharacteristic> characteristic =
             self->FindCharacteristic(request_handle);
-        if (self->characteristic_event_callback_ && characteristic) {
+        if (self->notification_callback_ && characteristic) {
           char *value = nullptr;
           int length = 0;
           int ret = bt_gatt_get_value(request_handle, &value, &length);
@@ -135,7 +135,7 @@ bool BleDevice::ReadCharacteristic(
           std::vector<uint8_t> bytes(value, value + length);
           free(value);
 
-          self->characteristic_event_callback_(*characteristic, bytes);
+          self->notification_callback_(*characteristic, bytes);
         }
       },
       this);
@@ -147,7 +147,7 @@ bool BleDevice::ReadCharacteristic(
 
 bool BleDevice::WriteCharacteristic(
     const QualifiedCharacteristic &characteristic,
-    const std::vector<uint8_t> &value, CharacteristicWriteCallback on_done,
+    const std::vector<uint8_t> &value, VoidCallback on_done,
     ErrorCallback on_error) {
   last_error_ = bt_gatt_set_value(characteristic.handle(),
                                   reinterpret_cast<const char *>(value.data()),
@@ -157,7 +157,7 @@ bool BleDevice::WriteCharacteristic(
   }
 
   struct UserData {
-    CharacteristicWriteCallback on_done;
+    VoidCallback on_done;
     ErrorCallback on_error;
   } *callbacks = new UserData;
   callbacks->on_done = std::move(on_done);
@@ -195,9 +195,9 @@ bool BleDevice::ListenNotifications(
         BleDevice *self = static_cast<BleDevice *>(user_data);
         std::shared_ptr<QualifiedCharacteristic> characteristic =
             self->FindCharacteristic(handle);
-        if (self->characteristic_event_callback_ && characteristic) {
+        if (self->notification_callback_ && characteristic) {
           std::vector<uint8_t> bytes(value, value + len);
-          self->characteristic_event_callback_(*characteristic, bytes);
+          self->notification_callback_(*characteristic, bytes);
         }
       },
       this);
@@ -214,6 +214,7 @@ bool BleDevice::StopNotifications(
   if (last_error_ != BT_ERROR_NONE) {
     return false;
   }
-  UnregisterCharacteristic(characteristic.handle());
+  notification_callback_ = nullptr;
+  notification_error_callback_ = nullptr;
   return true;
 }

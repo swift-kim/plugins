@@ -31,14 +31,14 @@ struct DiscoveredService {
   std::vector<DiscoveredService> included_services;
 };
 
-typedef std::function<void(const QualifiedCharacteristic& characteristic,
-                           const std::vector<uint8_t>& bytes)>
-    CharacteristicEventCallback;
-
-typedef std::function<void()> CharacteristicWriteCallback;
+typedef std::function<void()> VoidCallback;
 
 typedef std::function<void(int error_code, const std::string& error_message)>
     ErrorCallback;
+
+typedef std::function<void(const QualifiedCharacteristic& characteristic,
+                           const std::vector<uint8_t>& bytes)>
+    NotificationCallback;
 
 // A wrapper around the bt_gatt_client module.
 class BleDevice {
@@ -55,8 +55,7 @@ class BleDevice {
   // Writes a value to the specified characteristic.
   bool WriteCharacteristic(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& value,
-                           CharacteristicWriteCallback on_done,
-                           ErrorCallback on_error);
+                           VoidCallback on_done, ErrorCallback on_error);
 
   // Subscribes to updates from the specified characteristic.
   bool ListenNotifications(const QualifiedCharacteristic& characteristic);
@@ -64,10 +63,10 @@ class BleDevice {
   // Unsubscribes from the characteristic.
   bool StopNotifications(const QualifiedCharacteristic& characteristic);
 
-  void SetNotificationCallbacks(CharacteristicEventCallback on_event,
+  void SetNotificationCallbacks(NotificationCallback on_event,
                                 ErrorCallback on_error) {
-    characteristic_event_callback_ = std::move(on_event);
-    characteristic_event_error_callback_ = std::move(on_error);
+    notification_callback_ = std::move(on_event);
+    notification_error_callback_ = std::move(on_error);
   }
 
   std::shared_ptr<QualifiedCharacteristic> FindCharacteristicById(
@@ -110,23 +109,12 @@ class BleDevice {
     return nullptr;
   }
 
-  void UnregisterCharacteristic(bt_gatt_h handle) {
-    auto iter = std::find_if(
-        characteristics_.begin(), characteristics_.end(),
-        [handle](std::shared_ptr<QualifiedCharacteristic> instance) {
-          return instance->handle() == handle;
-        });
-    if (iter != characteristics_.end()) {
-      characteristics_.erase(iter);
-    }
-  }
-
   std::string device_id_;
   bt_gatt_client_h handle_ = nullptr;
 
   std::vector<std::shared_ptr<QualifiedCharacteristic>> characteristics_;
-  CharacteristicEventCallback characteristic_event_callback_;
-  ErrorCallback characteristic_event_error_callback_;
+  NotificationCallback notification_callback_;
+  ErrorCallback notification_error_callback_;
 
   int last_error_ = BT_ERROR_NONE;
 };
