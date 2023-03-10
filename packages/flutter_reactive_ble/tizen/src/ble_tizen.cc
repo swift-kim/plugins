@@ -255,7 +255,7 @@ bool BleTizen::SetConnectionStateChangeCallback(
         BleTizen *self = static_cast<BleTizen *>(user_data);
         if (remote_address) {
           if (result != BT_ERROR_NONE) {
-            LOG_ERROR("The connection request failed for device %s: %s",
+            LOG_ERROR("The connection request for device %s failed: %s",
                       remote_address, get_error_message(result));
           }
           std::string device_id = std::string(remote_address);

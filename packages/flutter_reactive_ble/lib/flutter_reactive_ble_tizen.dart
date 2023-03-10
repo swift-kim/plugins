@@ -34,21 +34,21 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
           'flutter_reactive_ble_scan')
       .receiveBroadcastStream()
       .map((dynamic event) =>
-          ScanResultExtension.fromMap((event as Map).cast<String, Object>()));
+          ScanResultExtension.fromMap((event as Map).cast<String, Object?>()));
 
   @override
   final Stream<ConnectionStateUpdate> connectionUpdateStream =
       const EventChannel('flutter_reactive_ble_connected_device')
           .receiveBroadcastStream()
           .map((dynamic event) => ConnectionStateUpdateExtension.fromMap(
-              (event as Map).cast<String, Object>()));
+              (event as Map).cast<String, Object?>()));
 
   @override
   final Stream<CharacteristicValue> charValueUpdateStream =
       const EventChannel('flutter_reactive_ble_char_update')
           .receiveBroadcastStream()
           .map((dynamic event) => CharacteristicValueExtension.fromMap(
-              (event as Map).cast<String, Object>()));
+              (event as Map).cast<String, Object?>()));
 
   @override
   Future<void> initialize() => methodChannel.invokeMethod('initialize');
@@ -89,14 +89,11 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
 
   @override
   Future<List<DiscoveredService>> discoverServices(String deviceId) async {
-    final dynamic result = await methodChannel.invokeMethod<dynamic>(
+    final result = await methodChannel.invokeListMethod<Map>(
       'discoverServices',
       <String, Object>{kDeviceId: deviceId},
     );
-    return (result as List)
-        .cast<Map<Object?, Object?>>()
-        .map(DiscoveredServiceExtension.fromMap)
-        .toList();
+    return result!.map(DiscoveredServiceExtension.fromMap).toList();
   }
 
   @override
@@ -125,15 +122,14 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
     QualifiedCharacteristic characteristic,
     List<int> value,
   ) async {
-    final dynamic result = await methodChannel.invokeMethod<dynamic>(
+    final result = await methodChannel.invokeMapMethod<String, Object?>(
       'writeCharacteristicWithResponse',
       <String, Object>{
         kQualifiedCharacteristic: characteristic.toMap(),
         kValue: Uint8List.fromList(value),
       },
     );
-    return WriteCharacteristicInfoExtension.fromMap(
-        (result as Map).cast<String, Object>());
+    return WriteCharacteristicInfoExtension.fromMap(result!);
   }
 
   @override
@@ -141,15 +137,14 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
     QualifiedCharacteristic characteristic,
     List<int> value,
   ) async {
-    final dynamic result = await methodChannel.invokeMethod<dynamic>(
+    final result = await methodChannel.invokeMapMethod<String, Object?>(
       'writeCharacteristicWithoutResponse',
       <String, Object>{
         kQualifiedCharacteristic: characteristic.toMap(),
         kValue: Uint8List.fromList(value),
       },
     );
-    return WriteCharacteristicInfoExtension.fromMap(
-        (result as Map).cast<String, Object>());
+    return WriteCharacteristicInfoExtension.fromMap(result!);
   }
 
   @override

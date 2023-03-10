@@ -27,7 +27,7 @@ const String kResult = 'result';
 const String kValue = 'value';
 
 extension DiscoveredDeviceExtension on DiscoveredDevice {
-  static DiscoveredDevice fromMap(Map<String, Object> map) {
+  static DiscoveredDevice fromMap(Map<String, Object?> map) {
     final serviceUuids =
         (map[kServiceIds] as List).cast<String>().map(Uuid.parse).toList();
     final serviceData = (map[kServiceData] as Map)
@@ -45,14 +45,14 @@ extension DiscoveredDeviceExtension on DiscoveredDevice {
 }
 
 extension ScanResultExtension on ScanResult {
-  static ScanResult fromMap(Map<String, Object> map) {
+  static ScanResult fromMap(Map<String, Object?> map) {
     final discoveredDevice = DiscoveredDeviceExtension.fromMap(map);
     return ScanResult(result: Result.success(discoveredDevice));
   }
 }
 
 extension ConnectionStateUpdateExtension on ConnectionStateUpdate {
-  static ConnectionStateUpdate fromMap(Map<String, Object> map) =>
+  static ConnectionStateUpdate fromMap(Map<String, Object?> map) =>
       ConnectionStateUpdate(
         deviceId: map[kDeviceId] as String,
         connectionState: DeviceConnectionState.values
@@ -77,11 +77,11 @@ extension DiscoveredCharacteristicExtension on DiscoveredCharacteristic {
 extension DiscoveredServiceExtension on DiscoveredService {
   static DiscoveredService fromMap(Map<Object?, Object?> map) {
     final includedServices = (map[kIncludedServices] as List)
-        .cast<Map<Object?, Object?>>()
+        .cast<Map>()
         .map(DiscoveredServiceExtension.fromMap)
         .toList();
     final characteristics = (map[kCharacteristics] as List)
-        .cast<Map<Object?, Object?>>()
+        .cast<Map>()
         .map(DiscoveredCharacteristicExtension.fromMap)
         .toList();
     final characteristicIds = (map[kCharacteristicIds] as List)
@@ -104,7 +104,7 @@ extension QualifiedCharacteristicExtension on QualifiedCharacteristic {
         kCharacteristicId: '$characteristicId',
       };
 
-  static QualifiedCharacteristic fromMap(Map<String, Object> map) =>
+  static QualifiedCharacteristic fromMap(Map<String, Object?> map) =>
       QualifiedCharacteristic(
         deviceId: map[kDeviceId] as String,
         serviceId: Uuid.parse(map[kServiceId] as String),
@@ -113,9 +113,9 @@ extension QualifiedCharacteristicExtension on QualifiedCharacteristic {
 }
 
 extension CharacteristicValueExtension on CharacteristicValue {
-  static CharacteristicValue fromMap(Map<String, Object> map) {
+  static CharacteristicValue fromMap(Map<String, Object?> map) {
     final characteristicMap =
-        (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
+        (map[kQualifiedCharacteristic] as Map).cast<String, Object?>();
     final valueList = (map[kResult] as List).cast<int>();
     return CharacteristicValue(
       characteristic:
@@ -126,9 +126,9 @@ extension CharacteristicValueExtension on CharacteristicValue {
 }
 
 extension WriteCharacteristicInfoExtension on WriteCharacteristicInfo {
-  static WriteCharacteristicInfo fromMap(Map<String, Object> map) {
+  static WriteCharacteristicInfo fromMap(Map<String, Object?> map) {
     final characteristicMap =
-        (map[kQualifiedCharacteristic] as Map).cast<String, Object>();
+        (map[kQualifiedCharacteristic] as Map).cast<String, Object?>();
     return WriteCharacteristicInfo(
       characteristic:
           QualifiedCharacteristicExtension.fromMap(characteristicMap),
