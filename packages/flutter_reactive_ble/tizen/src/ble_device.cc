@@ -157,11 +157,11 @@ bool BleDevice::ReadCharacteristic(
         std::vector<uint8_t> bytes(value, value + length);
         free(value);
 
-        if (params->self->notification_callback_) {
-          params->self->notification_callback_(*characteristic, bytes);
-        }
         if (params->on_done) {
           params->on_done();
+        }
+        if (params->self->notification_callback_) {
+          params->self->notification_callback_(*characteristic, bytes);
         }
         delete params;
       },
