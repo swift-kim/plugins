@@ -15,6 +15,7 @@ class BleLogger {
   void addToLog(String message) {
     final now = DateTime.now();
     _logMessages.add('${formatter.format(now)} - $message');
+    print('Log: $message');
   }
 
   void clearLogs() => _logMessages.clear();

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:flutter_reactive_ble_example/src/ble/ble_device_connector.dart';
@@ -98,7 +100,7 @@ class _DeviceInteractionTabState extends State<_DeviceInteractionTab> {
               [
                 Padding(
                   padding: const EdgeInsetsDirectional.only(
-                      top: 8.0, bottom: 16.0, start: 16.0),
+                      top: 8.0, bottom: 8.0, start: 16.0),
                   child: Text(
                     "ID: ${widget.viewModel.deviceId}",
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -107,12 +109,12 @@ class _DeviceInteractionTabState extends State<_DeviceInteractionTab> {
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: 16.0),
                   child: Text(
-                    "Status: ${widget.viewModel.connectionStatus}",
+                    "Status: ${widget.viewModel.connectionStatus.name}",
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 16.0),
+                  padding: const EdgeInsets.only(top: 8.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: <Widget>[
@@ -133,6 +135,19 @@ class _DeviceInteractionTabState extends State<_DeviceInteractionTab> {
                             ? discoverServices
                             : null,
                         child: const Text("Discover Services"),
+                      ),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final ble = FlutterReactiveBle();
+                          final requestMtu = Random().nextInt(500); // max 250
+                          print('Request MTU: $requestMtu');
+                          final mtu = await ble.requestMtu(
+                            deviceId: widget.viewModel.deviceId,
+                            mtu: requestMtu,
+                          );
+                          print('Result MTU: $mtu');
+                        },
+                        child: const Text('Negotiate MTU'),
                       ),
                     ],
                   ),
@@ -261,8 +276,8 @@ class _ServiceDiscoveryListState extends State<_ServiceDiscoveryList> {
       : Padding(
           padding: const EdgeInsetsDirectional.only(
             top: 20.0,
-            start: 20.0,
-            end: 20.0,
+            start: 40.0,
+            end: 40.0,
           ),
           child: ExpansionPanelList(
             expansionCallback: (int index, bool isExpanded) {

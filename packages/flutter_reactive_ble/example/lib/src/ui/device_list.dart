@@ -84,9 +84,9 @@ class _DeviceListState extends State<_DeviceList> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Scan for devices'),
-        ),
+        // appBar: AppBar(
+        //   title: const Text('Scan for devices'),
+        // ),
         body: Column(
           children: [
             Padding(
@@ -94,7 +94,7 @@ class _DeviceListState extends State<_DeviceList> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
+                  // const SizedBox(height: 16),
                   const Text('Service UUID (2, 4, 16 bytes):'),
                   TextField(
                     controller: _uuidController,
@@ -106,7 +106,7 @@ class _DeviceListState extends State<_DeviceList> {
                                 : 'Invalid UUID format'),
                     autocorrect: false,
                   ),
-                  const SizedBox(height: 16),
+                  // const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -128,7 +128,7 @@ class _DeviceListState extends State<_DeviceList> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            // const SizedBox(height: 8),
             Flexible(
               child: ListView(
                 children: [
@@ -137,19 +137,19 @@ class _DeviceListState extends State<_DeviceList> {
                     value: widget.verboseLogging,
                     onChanged: (_) => setState(widget.toggleVerboseLogging),
                   ),
-                  ListTile(
-                    title: Text(
-                      !widget.scannerState.scanIsInProgress
-                          ? 'Enter a UUID above and tap start to begin scanning'
-                          : 'Tap a device to connect to it',
-                    ),
-                    trailing: (widget.scannerState.scanIsInProgress ||
-                            widget.scannerState.discoveredDevices.isNotEmpty)
-                        ? Text(
-                            'count: ${widget.scannerState.discoveredDevices.length}',
-                          )
-                        : null,
-                  ),
+                  // ListTile(
+                  //   title: Text(
+                  //     !widget.scannerState.scanIsInProgress
+                  //         ? 'Enter a UUID above and tap start to begin scanning'
+                  //         : 'Tap a device to connect to it',
+                  //   ),
+                  //   trailing: (widget.scannerState.scanIsInProgress ||
+                  //           widget.scannerState.discoveredDevices.isNotEmpty)
+                  //       ? Text(
+                  //           'count: ${widget.scannerState.discoveredDevices.length}',
+                  //         )
+                  //       : null,
+                  // ),
                   ...widget.scannerState.discoveredDevices
                       .map(
                         (device) => ListTile(

@@ -59,7 +59,7 @@ class _CharacteristicInteractionDialogState
   late String writeOutput;
   late String subscribeOutput;
   late TextEditingController textEditingController;
-  late StreamSubscription<List<int>>? subscribeStream;
+  StreamSubscription<List<int>>? subscribeStream;
 
   @override
   void initState() {
@@ -72,6 +72,7 @@ class _CharacteristicInteractionDialogState
 
   @override
   void dispose() {
+    print('Cancel subscription.');
     subscribeStream?.cancel();
     super.dispose();
   }
@@ -79,6 +80,7 @@ class _CharacteristicInteractionDialogState
   Future<void> subscribeCharacteristic() async {
     subscribeStream =
         widget.subscribeToCharacteristic(widget.characteristic).listen((event) {
+      print('Received: $event');
       setState(() {
         subscribeOutput = event.toString();
       });
@@ -172,7 +174,7 @@ class _CharacteristicInteractionDialogState
 
   List<Widget> get subscribeSection => [
         sectionHeader('Subscribe / notify'),
-        Row(
+        Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             ElevatedButton(
@@ -185,14 +187,14 @@ class _CharacteristicInteractionDialogState
       ];
 
   Widget get divider => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12.0),
+        padding: EdgeInsets.symmetric(vertical: 6.0),
         child: Divider(thickness: 2.0),
       );
 
   @override
   Widget build(BuildContext context) => Dialog(
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(10.0),
           child: ListView(
             shrinkWrap: true,
             children: [
@@ -216,7 +218,7 @@ class _CharacteristicInteractionDialogState
               Align(
                 alignment: Alignment.bottomRight,
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 20.0),
+                  padding: const EdgeInsets.only(top: 10.0),
                   child: ElevatedButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('close')),
