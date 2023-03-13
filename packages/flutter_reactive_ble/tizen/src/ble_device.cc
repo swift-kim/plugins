@@ -106,6 +106,50 @@ std::vector<DiscoveredService> BleDevice::DiscoverServices() {
   return discovered_services;
 }
 
+bool BleDevice::NegotiateMtuSize(int32_t request_mtu,
+                                 MtuNegotiationCallback on_done,
+                                 ErrorCallback on_error) {
+  struct UserData {
+    MtuNegotiationCallback on_done;
+    ErrorCallback on_error;
+  } *params = new UserData;
+  params->on_done = std::move(on_done);
+  params->on_error = std::move(on_error);
+
+  // Unset any existing callback just before setting a new callback, because
+  // calling the unset function inside the callback will result in an internal
+  // memory corruption.
+  bt_gatt_client_unset_att_mtu_changed_cb(handle_);
+
+  last_error_ = bt_gatt_client_set_att_mtu_changed_cb(
+      handle_,
+      [](bt_gatt_client_h client, const bt_gatt_client_att_mtu_info_s *mtu_info,
+         void *user_data) {
+        UserData *params = static_cast<UserData *>(user_data);
+        if (mtu_info->status == 0) {
+          params->on_done(mtu_info->mtu);
+        } else {
+          // TODO(swift-kim): What does the status value mean?
+          params->on_error(mtu_info->status, "Failed to update the MTU value.");
+        }
+        delete params;
+      },
+      params);
+  if (last_error_ != BT_ERROR_NONE) {
+    LOG_ERROR("Could not set an MTU change callback: %s",
+              get_error_message(last_error_));
+    return false;
+  }
+
+  last_error_ = bt_gatt_client_request_att_mtu_change(handle_, request_mtu);
+  if (last_error_ != BT_ERROR_NONE) {
+    LOG_ERROR("Could not request an MTU change: %s",
+              get_error_message(last_error_));
+    return false;
+  }
+  return true;
+}
+
 bool BleDevice::ReadCharacteristic(
     const QualifiedCharacteristic &characteristic, VoidCallback on_done,
     ErrorCallback on_error) {
@@ -167,6 +211,8 @@ bool BleDevice::ReadCharacteristic(
       },
       params);
   if (last_error_ != BT_ERROR_NONE) {
+    LOG_ERROR("Could not read a value from the characteristic: %s",
+              get_error_message(last_error_));
     return false;
   }
   return true;
@@ -180,6 +226,8 @@ bool BleDevice::WriteCharacteristic(
                                   reinterpret_cast<const char *>(value.data()),
                                   static_cast<int>(value.size()));
   if (last_error_ != BT_ERROR_NONE) {
+    LOG_ERROR("Unable to set a value to the characteristic: %s",
+              get_error_message(last_error_));
     return false;
   }
 
@@ -207,6 +255,8 @@ bool BleDevice::WriteCharacteristic(
       },
       params);
   if (last_error_ != BT_ERROR_NONE) {
+    LOG_ERROR("Could not write to the characteristic: %s",
+              get_error_message(last_error_));
     delete params;
     return false;
   }

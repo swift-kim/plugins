@@ -24,6 +24,7 @@ const String kCharacteristicIds = 'characteristic_ids';
 const String kCharacteristics = 'characteristics';
 const String kQualifiedCharacteristic = 'qualified_characteristic';
 const String kResult = 'result';
+const String kMtu = 'mtu';
 const String kValue = 'value';
 
 extension DiscoveredDeviceExtension on DiscoveredDevice {

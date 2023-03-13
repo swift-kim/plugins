@@ -106,7 +106,11 @@ class ReactiveBleTizen extends ReactiveBlePlatform {
 
   @override
   Future<int> requestMtuSize(String deviceId, int? mtu) async {
-    throw UnimplementedError();
+    final mtuSize = await methodChannel.invokeMethod<int>(
+      'requestMtuSize',
+      <String, Object?>{kDeviceId: deviceId, kMtu: mtu},
+    );
+    return mtuSize!;
   }
 
   @override

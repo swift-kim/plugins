@@ -53,6 +53,7 @@ constexpr char kCharacteristicIds[] = "characteristic_ids";
 constexpr char kCharacteristics[] = "characteristics";
 constexpr char kQualifiedCharacteristic[] = "qualified_characteristic";
 constexpr char kResult[] = "result";
+constexpr char kMtu[] = "mtu";
 constexpr char kValue[] = "value";
 
 std::string MissingArgumentError(const char *name) {
@@ -405,7 +406,8 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       result->Success();
     } else if (method_name == "connectToDevice" ||
                method_name == "disconnectDevice" ||
-               method_name == "discoverServices") {
+               method_name == "discoverServices" ||
+               method_name == "requestMtuSize") {
       HandleDeviceOperation(method_call, std::move(result));
     } else if (method_name == "readCharacteristic" ||
                method_name == "writeCharacteristicWithResponse" ||
@@ -454,11 +456,44 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
         result->Error("Operation failed", "Failed to register a device.");
         return;
       }
+
       flutter::EncodableList services;
       for (const DiscoveredService &service : device->DiscoverServices()) {
         services.emplace_back(ServiceToEncodableValue(service));
       }
       result->Success(flutter::EncodableValue(services));
+    } else if (method_name == "requestMtuSize") {
+      std::shared_ptr<BleDevice> device = ble_tizen_->FindDeviceById(device_id);
+      if (!device) {
+        result->Error("Operation failed", "Failed to register a device.");
+        return;
+      }
+
+      int32_t request_mtu;
+      if (!GetValueFromEncodableMap(arguments, kMtu, request_mtu)) {
+        result->Error("Invalid arguments", MissingArgumentError(kMtu));
+        return;
+      }
+      if (request_mtu < 23) {
+        result->Error("Invalid arguments", "The MTU cannot be less than 23.");
+        return;
+      }
+
+      FlMethodResult *result_ptr = result.release();
+      if (!device->NegotiateMtuSize(
+              request_mtu,
+              [result_ptr](int32_t result_mtu) {
+                result_ptr->Success(flutter::EncodableValue(result_mtu));
+                delete result_ptr;
+              },
+              [result_ptr](int error_code, const std::string &error_message) {
+                result_ptr->Error(std::to_string(error_code), error_message);
+                delete result_ptr;
+              })) {
+        result_ptr->Error(std::to_string(device->GetLastError()),
+                          device->GetLastErrorString());
+        delete result_ptr;
+      }
     }
   }
 
@@ -516,7 +551,7 @@ class FlutterReactiveBleTizenPlugin : public flutter::Plugin {
       FlMethodResult *result_ptr = result.release();
       if (!device->ReadCharacteristic(
               *characteristic,
-              [result_ptr, device]() {
+              [result_ptr]() {
                 result_ptr->Success();
                 delete result_ptr;
               },

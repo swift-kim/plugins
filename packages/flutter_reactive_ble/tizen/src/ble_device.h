@@ -36,6 +36,8 @@ typedef std::function<void()> VoidCallback;
 typedef std::function<void(int error_code, const std::string& error_message)>
     ErrorCallback;
 
+typedef std::function<void(int32_t result_mtu)> MtuNegotiationCallback;
+
 typedef std::function<void(const QualifiedCharacteristic& characteristic,
                            const std::vector<uint8_t>& bytes)>
     NotificationCallback;
@@ -48,6 +50,10 @@ class BleDevice {
 
   // Discovers services adverstised by this device.
   std::vector<DiscoveredService> DiscoverServices();
+
+  // Requests a specific MTU for this device.
+  bool NegotiateMtuSize(int32_t request_mtu, MtuNegotiationCallback on_done,
+                        ErrorCallback on_error);
 
   // Reads a value from the specified characteristic.
   bool ReadCharacteristic(const QualifiedCharacteristic& characteristic,
