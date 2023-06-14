@@ -22,26 +22,24 @@ const String kIAPSource = 'samsung_checkout';
 /// This translates various `BillingManager` calls and responses into the
 /// generic plugin API.
 class InAppPurchaseTizenPlatform extends InAppPurchasePlatform {
-  InAppPurchaseTizenPlatform._() {
-    billingManager = BillingManager();
-
-    // Register [InAppPurchaseTizenPlatformAddition].
-    InAppPurchasePlatformAddition.instance =
-        InAppPurchaseTizenPlatformAddition(billingManager);
-
-    _purchaseUpdatedController =
-        StreamController<List<PurchaseDetails>>.broadcast();
-  }
+  /// Creates an [InAppPurchaseTizenPlatform] instance.
+  InAppPurchaseTizenPlatform();
 
   /// Registers this class as the default instance of [InAppPurchasePlatform].
   static void registerPlatform() {
-    // Register the platform instance with the plugin platform
-    // interface.
-    InAppPurchasePlatform.instance = InAppPurchaseTizenPlatform._();
+    // Register the [InAppPurchaseTizenPlatformAddition] containing
+    // Samsung Checkout-specific functionality.
+    InAppPurchasePlatformAddition.instance =
+        InAppPurchaseTizenPlatformAddition(billingManager);
+
+    // Register the platform-specific implementation of the idiomatic
+    // InAppPurchase API.
+    InAppPurchasePlatform.instance = InAppPurchaseTizenPlatform();
   }
 
-  static late StreamController<List<PurchaseDetails>>
-      _purchaseUpdatedController;
+  static final StreamController<List<PurchaseDetails>>
+      _purchaseUpdatedController =
+      StreamController<List<PurchaseDetails>>.broadcast();
 
   @override
   Stream<List<PurchaseDetails>> get purchaseStream =>
@@ -51,7 +49,7 @@ class InAppPurchaseTizenPlatform extends InAppPurchasePlatform {
   ///
   /// This field should not be used out of test code.
   @visibleForTesting
-  late final BillingManager billingManager;
+  static final BillingManager billingManager = BillingManager();
 
   @override
   Future<bool> isAvailable() async {
