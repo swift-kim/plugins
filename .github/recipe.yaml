@@ -34,6 +34,7 @@ plugins:
   camera: []
   flutter_webrtc: []
   geolocator: []
+  in_app_purchase: []
   network_info_plus: []
 
   # Only testable with the drive command: https://github.com/flutter-tizen/plugins/issues/272
