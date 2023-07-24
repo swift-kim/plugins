@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^0.13.0
+  video_player: any
   video_player_videohole:
     path: ../
 
